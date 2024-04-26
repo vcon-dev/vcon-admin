@@ -1,0 +1,40 @@
+version: "3.3"
+services:
+  vcon-admin:
+    container_name: "admin"
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    command: "streamlit run ./admin.py"
+    ports:
+      - "${VCON_ADMIN_EXTERNAL_PORT:-8501}:8501"
+    volumes:
+      - .:/app
+    depends_on:
+      - mongo
+    stop_grace_period: 60s
+    networks:
+      - conserver
+    labels:
+      - "traefik.http.routers.vcon-admin.rule=Path(`/admin`)"
+
+  mongo:
+    container_name: "mongo"
+    image: "mongo:latest"
+    ports:
+      - "${MONGO_EXTERNAL_PORT:-27017}:27017"
+    volumes:
+      - ./.data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongo --eval 'db.runCommand({ connectionStatus: 1 })'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - conserver
+
+# Specify the network for the services, it's shared between several compose files
+networks:
+  conserver:
+    name: conserver
+    external: true
