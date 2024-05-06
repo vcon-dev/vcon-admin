@@ -3,6 +3,9 @@ import pymongo
 import json
 import redis
 import boto3
+import lib.common as common
+common.init_session_state()
+
 
 # Initialize connection.
 # Uses st.cache_resource to only run once.

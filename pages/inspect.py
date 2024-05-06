@@ -1,7 +1,8 @@
 import streamlit as st
 import pymongo
-import openai
 import json
+import lib.common as common
+common.init_session_state()
 
 # Title and page layout
 st.title("VCON INSPECTOR")
@@ -20,21 +21,7 @@ def get_vcon_summary(vcon):
                 return a.get('body')
     return None
 
-# Setup the session state
-if "vcon_uuids" not in st.session_state:
-    st.session_state.vcon_uuids = []
 
-# Setup the selected vCon
-if "selected_vcon" not in st.session_state:
-    st.session_state.selected_vcon = None
-
-# Check to see if there's a uuid in the URL
-# If there is, set it as the selected vCon
-if st.query_params.get("uuid", None):
-    st.session_state.selected_vcon = st.query_params.get("uuid")
-    # Remove the query params from the URL
-    st.query_params.clear()
-    st.write("REMOVED QUERY PARAMS")
     
 selected_vcon = st.text_input("ENTER A VCON ID", value=st.session_state.selected_vcon)
 if selected_vcon:
@@ -62,8 +49,6 @@ if st.session_state.selected_vcon:
         vcon_uuids.append(st.session_state.selected_vcon)
         st.session_state.vcon_uuids = vcon_uuids
         st.success(f"ADDED {st.session_state.selected_vcon} TO WORKBENCH.")
-
-
 
     if vcon:
         try:

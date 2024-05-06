@@ -1,9 +1,8 @@
 import streamlit as st
-import redis
-import pandas as pd
 import pymongo
-import json
 import os
+import lib.common as common
+common.init_session_state()
 
 """
 

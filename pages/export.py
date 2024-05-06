@@ -2,6 +2,8 @@ import streamlit as st
 import pymongo
 import json
 import redis
+import lib.common as common
+common.init_session_state()
 
 
 # Initialize connection.
