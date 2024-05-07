@@ -3,6 +3,7 @@ import pymongo
 import json
 import redis
 import lib.common as common
+import boto3
 common.init_session_state()
 
 
@@ -69,4 +70,38 @@ if redis_url:
             redis_client.json().set(f"vcon:{uuid}", "$", json.dumps(vcon))
             progress_bar.progress((index + 1) / count)
 
+        st.success("COMPLETE")
+
+st.divider()
+"***EXPORT TO S3***"
+
+# Get the AWS credentials
+AWS_ACCESS_KEY_ID = st.secrets['aws']["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = st.secrets['aws']["AWS_SECRET_ACCESS_KEY"]
+AWS_DEFAULT_REGION = st.secrets['aws']["AWS_DEFAULT_REGION"]
+s3_bucket = st.text_input("ENTER S3 BUCKET", key="s3_bucket_export")
+s3_path = st.text_input("ENTER S3 PATH", key="s3_path_export")
+if s3_bucket:
+    if st.button("EXPORT VCONS", key="export_s3"):
+        # Connect to S3
+        s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, region_name=AWS_DEFAULT_REGION)
+        db = client[str(st.secrets["mongo_db"]["db"])]
+        vcons = db[st.secrets["mongo_db"]["collection"]].find()
+
+        # Count the number of vCons we're exporting overall
+        count = db[st.secrets["mongo_db"]["collection"]].count_documents({})
+        st.write(f"EXPORTING {count} VCONS")
+        # Show progress
+        progress_bar = st.progress(0)
+        for index, vcon in enumerate(vcons):
+            uuid = vcon['uuid']
+            filename = f"{uuid}.vcon.json"
+            if s3_path:
+                key = f"{s3_path}/{filename}"
+            else:
+                key = filename
+            result = s3_client.put_object(Bucket=s3_bucket, Key=key, Body=json.dumps(vcon))
+            progress_bar.progress((index + 1) / count)
+
+        # After the upload operation
         st.success("COMPLETE")
