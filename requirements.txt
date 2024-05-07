@@ -4,4 +4,4 @@ pandas
 pymongo
 boto3
 openai
-
+elasticsearch
