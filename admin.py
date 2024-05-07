@@ -34,7 +34,7 @@ with st.sidebar:
                 st.markdown(contents)
     with st.expander("Danger Zone"):
         # Enable the user to delete the database
-        if st.button("DELETE vCon DATABASE"):
+        if st.button("DELETE vCon DATABASE", key="delete_db", help="This will delete the entire database."):
             # Get the database name
             db_name = st.secrets["mongo_db"]["db"]
             # Drop the database
