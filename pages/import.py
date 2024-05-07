@@ -38,18 +38,19 @@ upload_tab, upload_zip_tab, jsonl_tab, url_tab, text_tab, redis_tab, s3_tab = st
 with upload_tab:
     "**UPLOAD A SINGLE VCON FILE**"
     # Allow the user to upload a single JSON file
-    uploaded_file = st.file_uploader("UPLOAD", type=["json", "vcon"], accept_multiple_files=True)
-    if uploaded_file is not None:
+    uploaded_files = st.file_uploader("UPLOAD", type=["json", "vcon"], accept_multiple_files=True)
+    if uploaded_files is not None:
         if st.button("UPLOAD AND INSERT"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
-            try:
-                document = json.load(uploaded_file)
-                collection.replace_one({'_id': document['uuid']}, document, upsert=True)
-                st.success("INSERTED SUCCESSFULLY!")
-            except json.JSONDecodeError as e:
-                st.warning("INVALID JSON")
-                st.error(e)
+            for uploaded_file in uploaded_files:
+                try:
+                    document = json.load(uploaded_file)
+                    collection.replace_one({'_id': document['uuid']}, document, upsert=True)
+                    st.success("INSERTED SUCCESSFULLY!")
+                except json.JSONDecodeError as e:
+                    st.warning("INVALID JSON")
+                    st.error(e)
 
 with upload_zip_tab:
     "**UPLOAD ZIP FILE**"
