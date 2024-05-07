@@ -43,11 +43,25 @@ st.metric("VCON COUNT WITH SUMMARIES", vcon_with_summaries)
 st.write("## VCON COUNT BY DAY")
 pipeline = [
     {
+        "$match": {
+            "created_at": {
+                "$exists": True
+            }
+        }
+    },
+     {
+        "$addFields": {
+            "date_created_at": {
+                "$toDate": "$created_at"
+            }
+        }
+    },
+    {
         "$group": {
             "_id": {
                 "$dateToString": {
                     "format": "%Y-%m-%d",
-                    "date": "$created_at"
+                    "date": "$date_created_at"
                 }
             },
             "count": {"$sum": 1}
