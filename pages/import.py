@@ -3,6 +3,9 @@ import pymongo
 import json
 import redis
 import boto3
+# Unzip the file
+import zipfile
+import io
 import lib.common as common
 common.init_session_state()
 
@@ -14,18 +17,28 @@ def init_connection():
     url = st.secrets["mongo_db"]["url"]
     return pymongo.MongoClient(url)
 
+@st.cache(allow_output_mutation=True)
+def load_and_insert_file(file):
+    try:
+        document = json.load(file)
+        collection.replace_one({'_id': document['uuid']}, document, upsert=True)
+    except json.JSONDecodeError as e:
+        st.warning(f"SKIPPED INVALID JSON, FILE {filename}")
+        return False
+    return True
+
+
 client = init_connection()
 
 st.title("IMPORT VCONS")
 
-tab_names= ["UPLOAD ONE", "UPLOAD JSONL", "URL", "TEXT", "REDIS", "S3"]
-upload_tab, jsonl_tab, url_tab, text_tab, redis_tab, s3_tab = st.tabs(tab_names)
+tab_names= ["UPLOAD ONE", "UPLOAD ZIP", "UPLOAD JSONL", "URL", "TEXT", "REDIS", "S3"]
+upload_tab, upload_zip_tab, jsonl_tab, url_tab, text_tab, redis_tab, s3_tab = st.tabs(tab_names)
 
 with upload_tab:
     "**UPLOAD A SINGLE VCON FILE**"
-
     # Allow the user to upload a single JSON file
-    uploaded_file = st.file_uploader("UPLOAD", type=["json", "vcon"])
+    uploaded_file = st.file_uploader("UPLOAD", type=["json", "vcon"], accept_multiple_files=True)
     if uploaded_file is not None:
         if st.button("UPLOAD AND INSERT"):
             db = client[st.secrets["mongo_db"]['db']]
@@ -37,6 +50,34 @@ with upload_tab:
             except json.JSONDecodeError as e:
                 st.warning("INVALID JSON")
                 st.error(e)
+
+with upload_zip_tab:
+    "**UPLOAD ZIP FILE**"
+    # Allow the user to upload a zip file
+    uploaded_file = st.file_uploader("UPLOAD ZIP", type="zip")
+    if uploaded_file is not None:
+        if st.button("UPLOAD AND INSERT", key="upload_zip"):
+            db = client[st.secrets["mongo_db"]['db']]
+            collection = db[st.secrets["mongo_db"]['collection']]
+            z = zipfile.ZipFile(io.BytesIO(uploaded_file.read()))
+            vcons_uploaded = 0
+            
+            for filename in z.namelist():
+                # If this ends in .vcon or .json, we'll try to load it
+                if not filename.endswith("/"):
+                    with z.open(filename) as file:
+                        try:
+                            # load the file from the zip
+                            document = json.load(file)
+                            collection.replace_one({'_id': document['uuid']}, document, upsert=True)
+                            vcons_uploaded += 1
+                        except json.JSONDecodeError as e:
+                            continue
+                        except UnicodeDecodeError as e:
+                            continue
+            st.success(f"INSERTED {vcons_uploaded} SUCCESSFULLY!")
+   
+
 
 with jsonl_tab:
     "**UPLOAD BULK VCON**"
