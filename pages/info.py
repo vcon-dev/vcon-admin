@@ -89,45 +89,30 @@ data = data.set_index('Dates')
 # Display a line chart
 st.line_chart(data)
 
-# Display a chart of the number of vCons per day the last day
-st.write("## VCON COUNT BY HOUR")
-pipeline = [
-    {
-        "$match": {
-            "created_at": {
-                "$gt": pd.Timestamp.now() - pd.Timedelta("1 day")
-            }
-        }
-    },
-    {
-        "$group": {
-            "_id": {
-                "$dateToString": {
-                    "format": "%Y-%m-%d %H",
-                    "date": "$created_at"
-                }
-            },
-            "count": {"$sum": 1}
-        }
-    },
-    {
-        "$sort": {
-            "_id": 1
-        }
-    }
-]
-results = list(collection.aggregate(pipeline))
-dates = [r["_id"] for r in results]
-counts = [r["count"] for r in results]
+# Make a paginated table of the vCons in the database
+st.write("## LAST VCONS")
+# Get all the vCons from the database, sorted by created_at DESC
+vcons = collection.find({}).sort("created_at", pymongo.DESCENDING)
 
-# Create a DataFrame with your data
-data = pd.DataFrame({
-  'Dates': dates,
-  'Counts': counts
-})
+# Display the vCons in a paginated table
+# Load a page of vCons at a time
+page = st.number_input("Page", min_value=1, value=1)
+page_size = 25
+start = (page - 1) * page_size
+end = start + page_size
 
-# Set Dates as the index
-data = data.set_index('Dates')
-# Display a line chart
-st.line_chart(data)
+# Get the vCons for the current page
+vcons = list(collection.find({}).skip(start).limit(page_size))
+
+# For each vCon, display the UUID, created_at, size and a button to inspect it
+for vcon in vcons:
+    st.write(f"**UUID:** {vcon['uuid']}")
+    st.write(f"**CREATED AT:** {vcon['created_at']}")
+    st.write(f"**SIZE:** {len(json.dumps(vcon))} bytes")
+    inspect = st.button("INSPECT", key=vcon['uuid'])
+    if inspect:
+        # Store the selected vCon in the session state
+        st.session_state.selected_vcon = vcon['uuid']
+        # Redirect to the inspect page
+        st.switch_page("pages/inspect.py")
 
