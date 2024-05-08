@@ -60,7 +60,10 @@ def index_vcon(vcon, es_client):
                 "updated_at": datetime.now(),
                 "parties": vcon.get('parties', []),
                 "dialog": vcon.get('dialog', []),
-                "analysis": vcon.get('analysis', [])
+                "analysis": vcon.get('analysis', []),
+                "attachments": vcon.get('attachments', []),
+                "summary": get_vcon_summary(vcon),
+                "transcript": get_vcon_transcript(vcon)
             }
             es_client.index(index="vcons", id=vcon_id, body=body)
             return True
@@ -82,7 +85,7 @@ def search_vcons(query, es_client):
         "query": {
             "multi_match": {
                 "query": query,
-                "fields": ["parties.name", "dialog.text", "analysis.body"]
+                "fields": ["parties.name", "dialog.text", "analysis.body", "summary", "transcript", "attachments.name"]
             }
         }
     }

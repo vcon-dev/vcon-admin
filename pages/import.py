@@ -169,31 +169,46 @@ with s3_tab:
             paginator = s3_client.get_paginator('list_objects_v2')
             pages = paginator.paginate(Bucket=s3_bucket, Prefix=s3_path)
 
-            # Count the number of vCons we're importing overall
-            count = 0
+            # Count the number of vCons we're importing overall, so we can show a progress bar
+            total_vcons = 0
+            for page in pages:
+                # Check to see if there are any vCons in this page
+                key_count = page['KeyCount']
+                if key_count == 0:
+                    st.warning("NO VCONS FOUND")
+                    st.stop()
+                    break
+                for obj in page['Contents']:
+                    key = obj['Key']
+                    if key.endswith(".vcon.json") or key.endswith(".vcon"):
+                        total_vcons += 1
+                        
+            # Reset the paginator
+            pages = paginator.paginate(Bucket=s3_bucket, Prefix=s3_path)
+            progress_text = f"IMPORTING {total_vcons} VCONS"
+            progress_bar = st.progress(0, text=progress_text)
+            skipped_files = 0
+            uploaded_files = 0
             for index, page in enumerate(pages):
                 for obj in page['Contents']:
                     key = obj['Key']
-                    if key.endswith(".vcon.json"):
-                        count += 1
-            st.write(f"IMPORTING {count} VCONS")
-            # Show progress
-            progress_bar = st.progress(0)
-            upload_count = 0
-            for index, page in enumerate(pages):
-                for obj in page['Contents']:
-                    # increment the progress bar
-                    key = obj['Key']
-                    if key.endswith(".vcon.json"):
+                    if key.endswith(".vcon.json") or key.endswith(".vcon"):
                         try:
                             vcon = s3_client.get_object(Bucket=s3_bucket, Key=key)
                             vcon = json.loads(vcon['Body'].read())
                             result = collection.replace_one({'_id': vcon['uuid']}, vcon, upsert=True)
-                            upload_count += 1
-                            progress_bar.progress(upload_count / count)
+                            uploaded_files += 1
                         except json.JSONDecodeError as e:
                             st.warning("INVALID JSON")
-                            st.error(e)
+                            skipped_files += 1
+                        except UnicodeDecodeError as e:
+                            st.warning("INVALID JSON")
+                            skipped_files += 1
+                        except Exception as e:
+                            st.warning("INVALID JSON")
+                            skipped_files += 1
                     else:
-                        st.warning(f"SKIPPING {key}")
-            st.success("COMPLETE")
+                        skipped_files += 1
+                    progress_bar.progress((uploaded_files+skipped_files)/total_vcons, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
+                        
+            st.success(f"UPLOADED {uploaded_files}, SKIPPED: {skipped_files}")
