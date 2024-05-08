@@ -7,7 +7,7 @@ common.sidebar()
 
 # This code is for v1 of the openai package: pypi.org/project/openai
 from openai import OpenAI
-OPENAI_API_KEY="sk-xxxxxxxxxxx"
+OPENAI_API_KEY=st.secrets["openai"]["api_key"]
 open_ai_client = OpenAI(
     api_key=OPENAI_API_KEY
 )
