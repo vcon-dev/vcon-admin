@@ -3,6 +3,7 @@ import pymongo
 import json
 import lib.common as common
 common.init_session_state()
+common.sidebar()
 
 # This code is for v1 of the openai package: pypi.org/project/openai
 from openai import OpenAI

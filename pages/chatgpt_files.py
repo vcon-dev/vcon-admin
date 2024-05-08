@@ -12,6 +12,7 @@ client = OpenAI(
   api_key=st.secrets["openai"]["testing_key"]
 )
 common.init_session_state()
+common.sidebar()
 
 # Synchronize the vCons into Open AI
 st.title("OpenAI File Synchronization")

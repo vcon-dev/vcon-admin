@@ -5,6 +5,7 @@ import lib.common as common
 import pandas as pd
 
 common.init_session_state()
+common.sidebar()
 
 # This page is for general information about the system, the number of vCons, etc.
 # It's also a place for quality metrics like "Number of vCons analyzed" and "Number of vCons with summaries"

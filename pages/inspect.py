@@ -3,6 +3,7 @@ import pymongo
 import json
 import lib.common as common
 common.init_session_state()
+common.sidebar()
 
 # Title and page layout
 st.title("VCON INSPECTOR")
