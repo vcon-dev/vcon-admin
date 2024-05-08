@@ -7,6 +7,7 @@ import boto3
 import zipfile
 import io
 import lib.common as common
+
 common.init_session_state()
 common.sidebar()
 
@@ -210,6 +211,9 @@ with s3_tab:
                             skipped_files += 1
                     else:
                         skipped_files += 1
-                    progress_bar.progress((uploaded_files+skipped_files)/total_vcons, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
+                    # Calculate the percentage of vCons uploaded, maximum 100%
+
+                    percentage_done = max((uploaded_files+skipped_files)/total_vcons, 1.0)
+                    progress_bar.progress(percentage_done, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
                         
             st.success(f"UPLOADED {uploaded_files}, SKIPPED: {skipped_files}")
