@@ -68,7 +68,7 @@ if redis_url:
         progress_bar = st.progress(0)
         for index, vcon in enumerate(vcons):
             uuid = vcon['uuid']
-            redis_client.json().set(f"vcon:{uuid}", "$", json.dumps(vcon))
+            redis_client.json().set(f"vcon:{uuid}", "$", vcon)
             progress_bar.progress((index + 1) / count)
 
         st.success("COMPLETE")
