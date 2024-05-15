@@ -3,7 +3,6 @@ import pymongo
 import json
 import redis
 import boto3
-# Unzip the file
 import zipfile
 import io
 import lib.common as common
@@ -212,8 +211,8 @@ with s3_tab:
                     else:
                         skipped_files += 1
                     # Calculate the percentage of vCons uploaded, maximum 100%
-
-                    percentage_done = max((uploaded_files+skipped_files)/total_vcons, 1.0)
+                    percentage_done = min(100, int((uploaded_files + skipped_files) / total_vcons * 100))
+                    
                     progress_bar.progress(percentage_done, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
                         
             st.success(f"UPLOADED {uploaded_files}, SKIPPED: {skipped_files}")
