@@ -3,117 +3,85 @@ import pymongo
 import json
 import lib.common as common
 import pandas as pd
+import pandas as pd
+st.set_page_config(
+    page_title="Info",
+    layout="wide"
+)
+
 
 common.init_session_state()
 common.sidebar()
-
-# This page is for general information about the system, the number of vCons, etc.
-# It's also a place for quality metrics like "Number of vCons analyzed" and "Number of vCons with summaries"
-st.title("VCON INFO")
 
 # Function to initialize the MongoDB connection
 def get_mongo_client():
     url = st.secrets["mongo_db"]["url"]
     return pymongo.MongoClient(url)
 
+def parties_as_markdown(parties):
+    # {"tel": "+19981076214", "meta": {"role": "customer"}, "name": "Janet Davis", "email": "janet.davis@gmail.com"}
+    # Convert the party to a markdown string, including all of the information,
+    # yet checking to make sure it exists
+    party_str = ""
+    for party in parties:
+        role = party.get("meta", {}).get("role", "")
+        # Upper case the role
+        role = role.upper()
+        party_str += f"{role} - {party.get('name', '')} {party.get('tel', '')} {party.get('email', '')}"   
+    return party_str
+
 
 client = get_mongo_client()
 db = client[st.secrets["mongo_db"]["db"]]
 collection = db[st.secrets["mongo_db"]["collection"]]
 vcon_count = collection.count_documents({})
+vcons = collection.find({})
 
-# Display the number of vCons in the database
-st.metric("TOTAL VCON COUNT", vcon_count)
+st.title(f"VCON INFO: {vcon_count} vcons")
 
-# Display the number of vCons with summaries
-pipeline = [
-    {
-        "$match": {
-            "analysis.type": "summary"
-        }
-    },
-    {
-        "$count": "count"
-    }
-]
-results = list(collection.aggregate(pipeline))
-vcon_with_summaries = results[0]["count"] if results else 0
-st.metric("VCON COUNT WITH SUMMARIES", vcon_with_summaries)
+# Pagination settings
+items_per_page = 10
 
-# Display a chart of the number of vCons per day for the past 30 days
-st.write("## VCON COUNT BY DAY")
-pipeline = [
-    {
-        "$match": {
-            "created_at": {
-                "$exists": True
-            }
-        }
-    },
-     {
-        "$addFields": {
-            "date_created_at": {
-                "$toDate": "$created_at"
-            }
-        }
-    },
-    {
-        "$group": {
-            "_id": {
-                "$dateToString": {
-                    "format": "%Y-%m-%d",
-                    "date": "$date_created_at"
-                }
-            },
-            "count": {"$sum": 1}
-        }
-    },
-    {
-        "$sort": {
-            "_id": 1
-        }
-    }
-]
-results = list(collection.aggregate(pipeline))
-dates = [r["_id"] for r in results]
-counts = [r["count"] for r in results]
+# Streamlit session state to keep track of the current page
+if 'page' not in st.session_state:
+    st.session_state.page = 0
 
-# Create a DataFrame with your data
-data = pd.DataFrame({
-  'Dates': dates,
-  'Counts': counts
-})
+# Pagination controls
+total_items = collection.count_documents({})
+total_pages = (total_items + items_per_page - 1) // items_per_page
 
-# Set Dates as the index
-data = data.set_index('Dates')
+# Fetch and display documents for the current page
+skip = st.session_state.page * items_per_page
+documents = list(collection.find().skip(skip).limit(items_per_page))
+df = pd.DataFrame(documents)
 
-# Display a line chart
-st.line_chart(data)
+# Remove the analysis column
+df = df.drop(columns=["analysis", "attachments", "updated_at", "_id"])
 
-# Make a paginated table of the vCons in the database
-st.write("## LAST VCONS")
-# Get all the vCons from the database, sorted by created_at DESC
-vcons = collection.find({}).sort("created_at", pymongo.DESCENDING)
+# Convert the created_at column to a datetime object
+df["created_at"] = df["created_at"].apply(lambda x: pd.to_datetime(x))
 
-# Display the vCons in a paginated table
-# Load a page of vCons at a time
-page = st.number_input("Page", min_value=1, value=1)
-page_size = 25
-start = (page - 1) * page_size
-end = start + page_size
+# Extract the from each dialog object the total duration
+df["total_duration"] = df["dialog"].apply(lambda x: sum([int(dialog["duration"]) for dialog in x]))
 
-# Get the vCons for the current page
-vcons = list(collection.find({}).skip(start).limit(page_size))
+# Extract the names, tel and email addresses from parties
+df["party_names"] = df["parties"].apply(lambda x: parties_as_markdown(x))
 
-# For each vCon, display the UUID, created_at, size and a button to inspect it
-for vcon in vcons:
-    st.write(f"**UUID:** {vcon['uuid']}")
-    st.write(f"**CREATED AT:** {vcon['created_at']}")
-    st.write(f"**SIZE:** {len(json.dumps(vcon))} bytes")
-    inspect = st.button("INSPECT", key=vcon['uuid'])
-    if inspect:
-        # Store the selected vCon in the session state
-        st.session_state.selected_vcon = vcon['uuid']
-        # Redirect to the inspect page
-        st.switch_page("pages/inspect.py")
+df['link'] = df['uuid'].apply(lambda x: f'<a href="/inspect?uuid={x}">Details</a>')
 
+df = df.drop(columns=["parties"])
+df = df.drop(columns=["dialog"])
+
+# Display dataframe with clickable links
+st.markdown(df.to_html(escape=False), unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("Previous") and st.session_state.page > 0:
+        st.session_state.page -= 1
+with col2:
+    st.write(f"Page {st.session_state.page + 1} of {total_pages}")
+    
+with col3:
+    if st.button("Next") and st.session_state.page < total_pages - 1:
+        st.session_state.page += 1
