@@ -44,7 +44,7 @@ def get_vcon(uuid):
 
 def sidebar():
     with st.sidebar:
-        
+                    
         banner = '''
         * _Proudly Engineered in Boston by [Strolid's](http://strolid.ai) World Wide Team_
         * _Interested in vCons? [Learn More](https://docs.vcon.dev)_
@@ -64,6 +64,8 @@ def sidebar():
         with st.expander("Danger Zone"):
             # Enable the user to delete the database
             if st.button("DELETE vCon DATABASE", key="delete_db", help="This will delete the entire database."):
+                client = get_mongo_client()
+
                 # Get the database name
                 db_name = st.secrets["mongo_db"]["db"]
                 # Drop the database
