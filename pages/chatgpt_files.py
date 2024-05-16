@@ -31,16 +31,34 @@ file_purposes = [
     "fine-tune-results",
 ]
 purpose = st.selectbox("File Purpose", file_purposes)
-default_vector_store_name = st.secrets["openai"]["vector_store_name"]
-vector_store_name = st.text_input("Vector Store Name", value=default_vector_store_name)
 
+# Make a dropdown for the vector store. Use the API to get the vector stores, and then populate the dropdown
+vector_stores = client.beta.vector_stores.list()
+
+# Use the human readable name for the dropdown
+vector_store_names = [vector_store.name for vector_store in vector_stores.data]
+vector_store_id = st.selectbox("Vector Store", vector_store_names)
+
+# Convert the human readable name to the ID
+vector_store_id = vector_stores.data[vector_store_names.index(vector_store_id)].id
+with st.expander("Vector Store Details"):
+    vector_store = client.beta.vector_stores.retrieve(vector_store_id)
+    st.write(f"**Name**: {vector_store.name}")
+    st.write(f"**File Counts**:")
+    st.write(f"  _In Progress_: {vector_store.file_counts.in_progress}")
+    st.write(f"  _Completed_: {vector_store.file_counts.completed}")
+    st.write(f"  _Failed_: {vector_store.file_counts.failed}")
+    st.write(f"  _Cancelled_: {vector_store.file_counts.cancelled}")
+    st.write(f"  **Total**: {vector_store.file_counts.total}")
+    
+    
 # Upload the vCons
-upload = st.button("Upload")
+upload = st.button("Upload vCons to OpenAI")
 if upload:
     vcons = common.get_vcons()
     files = []
-    progress_text = f"Uploading {len(vcons)} files to OpenAI."
-    with st.progress(0, text=progress_text):
+    with st.status(f"Uploading vcons to vector store") as status:
+      st.write(f"Uploading {len(vcons)} vcons to OpenAI.")
       for i, vcon in enumerate(vcons):
         # Save the vCon as a file
         file_name = f'{vcon["uuid"]}.vcon.json'
@@ -49,37 +67,18 @@ if upload:
             
         # Upload the file to OpenAI
         file = client.files.create(file=open(file_name, "rb"), purpose=purpose)
-        files.append(file)
-        
+        files.append(file)      
         # Remove the file
         os.remove(file_name)
-        st.progress((i+1)/len(vcons))
-    st.success("Files uploaded successfully")
-      
-
-    progress_text = "Deleting old vector store if it exists"
-    with st.progress(0, text=progress_text):
-      vector_store = client.beta.vector_stores.list()
-      for store in vector_store.data:
-        if store.name == st.secrets["openai"]["vector_store_name"]:
-          st.write(f"Deleting vector store {store.id}")
-          client.beta.vector_stores.delete(vector_store_id=store.id)
-          
-    progress_text = "Creating new vector store"
-    with st.progress(0, text=progress_text):
-      vector_store = client.beta.vector_stores.create(
-        name=vector_store_name
-      )    
-           
-    progress_text = "Adding files to the vector store"
-    with st.progress(0, text=progress_text):
+      st.write(f"Files uploaded to OpenAI.")
+      st.write(f"Adding files to vector store")     
       for file in files:
         vector_store_file = client.beta.vector_stores.files.create(
-          vector_store_id=vector_store.id,
+          vector_store_id=vector_store_id,
           file_id=file.id
         )
-
-    st.success("Files uploaded successfully and added to the vector store")
+      st.write(f"Files added to vector store {vector_store_id}")
+      st.write(f"Files uploaded to OpenAI.")
     
 st.divider()
 st.subheader("Download Files")
