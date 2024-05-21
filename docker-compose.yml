@@ -29,10 +29,12 @@ services:
     image: mongo
     restart: always
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
     networks:
       - conserver
+    volumes:
+      - mongo-data:/data/db
 
   mongo-express:
     image: mongo-express
@@ -40,30 +42,34 @@ services:
     ports:
       - 8081:8081
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-      ME_CONFIG_MONGODB_ADMINPASSWORD: example
-      ME_CONFIG_MONGODB_URL: mongodb://root:example@mongo:27017/
+      ME_CONFIG_MONGODB_ADMINUSERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
+      ME_CONFIG_MONGODB_ADMINPASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
+      ME_CONFIG_MONGODB_URL: "${MONGO_URL:-mongodb://root:example@mongo:27017/}"
       ME_CONFIG_BASICAUTH: false
     networks:
       - conserver
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: elasticsearch
     environment:
       - node.name=elasticsearch
-      - cluster.name=es-docker-cluster
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - discovery.type=single-node
+      - ELASTIC_USERNAME="${ELASTIC_USERNAME:-elastic}"
+      - ELASTIC_PASSWORD="${ELASTIC_PASSWORD:-changeme}"
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=false
+    mem_limit: 1g
+    ports:
+      - 9200:9200
     volumes:
-      - esdata1:/usr/share/elasticsearch/data
+      - es_data:/usr/share/elasticsearch/data
     networks:
       - conserver
 
 volumes:
-  esdata1:
+  es_data:
     driver: local
+  mongo-data:
+    driver: local
+

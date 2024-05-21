@@ -26,10 +26,12 @@ def get_es_client():
     url = st.secrets["elasticsearch"]["url"]
     username = st.secrets["elasticsearch"]["username"]
     password = st.secrets["elasticsearch"]["password"]
-    ca_certs = st.secrets["elasticsearch"]["ca_certs"]
-    print(ca_certs)
-    # elastic.crt is the certificate file
-    return Elasticsearch(url, basic_auth=(username, password), ca_certs=ca_certs)
+    ca_certs = st.secrets["elasticsearch"].get("ca_certs", None)
+    
+    if ca_certs and os.path.exists(ca_certs):
+        return Elasticsearch(url, basic_auth=(username, password), ca_certs=ca_certs)
+    else:
+        return Elasticsearch(url, basic_auth=(username, password), verify_certs=False)
 
 
 # Function to return the summary of a vCon if it's available
@@ -77,7 +79,11 @@ def index_all_vcons(es_client):
     collection = db[st.secrets["mongo_db"]["collection"]]
     vcons = collection.find({})
     for vcon in vcons:
-        index_vcon(vcon, es_client)
+        try:
+            index_vcon(vcon, es_client)
+        except Exception as e:
+            print(e)
+            continue
     return True
 
 # Function to search for vCons in Elasticsearch
