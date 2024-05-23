@@ -104,7 +104,7 @@ with url_tab:
     "**IMPORT FROM URL**"
     url = st.text_input("ENTER URL")
     if url:
-        if st.button("IMPORT"):
+        if st.button("IMPORT", key="import_url"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
             try:
@@ -120,7 +120,7 @@ with text_tab:
     "**IMPORT FROM TEXT**"
     text = st.text_area("ENTER TEXT")
     if text:
-        if st.button("IMPORT"):
+        if st.button("IMPORT", key="import_text"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
             try:
@@ -135,22 +135,27 @@ with redis_tab:
     # Import from REDIS
     "**IMPORT FROM REDIS**"
     redis_url= st.text_input("ENTER REDIS URL")
+    redis_password = st.text_input("ENTER REDIS PASSWORD")
     if redis_url:
-        if st.button("IMPORT"):
+        if st.button("IMPORT", key="import_redis"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
 
             # Connect to the REDIS server, and find all the keys with the pattern "vcon:*"
-            
-            redis_client = redis.Redis.from_url(redis_url)
+            if redis_password:
+                redis_client = redis.Redis.from_url(redis_url, password=redis_password)
+            else:
+                redis_client = redis.Redis.from_url(redis_url)
             keys = redis_client.keys("vcon:*")
-            for key in keys:
-                vcon = redis_client.json().get(key)
-                try:
-                    collection.replace_one({'_id': vcon['uuid']}, vcon, upsert=True)
-                except json.JSONDecodeError as e:
-                    st.warning("INVALID JSON")
-                    st.error(e)
+            with st.spinner("IMPORTING VCONS"):
+                for key in keys:
+                    vcon = redis_client.json().get(key)
+                    try:
+                        collection.replace_one({'_id': vcon['uuid']}, vcon, upsert=True)
+                    except json.JSONDecodeError as e:
+                        st.warning("INVALID JSON")
+                        st.error(e)
+            st.success("IMPORTED SUCCESSFULLY!")
 
 with s3_tab:
     "**IMPORT S3 BUCKET**"
@@ -161,7 +166,7 @@ with s3_tab:
     s3_bucket = st.text_input("ENTER S3 BUCKET")
     s3_path = st.text_input("ENTER S3 PATH")
     if s3_bucket:
-        if st.button("IMPORT"):
+        if st.button("IMPORT", key="import_s3"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
             s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, region_name=AWS_DEFAULT_REGION)
@@ -211,7 +216,7 @@ with s3_tab:
                     else:
                         skipped_files += 1
                     # Calculate the percentage of vCons uploaded, maximum 100%
-                    percentage_done = min(100, int((uploaded_files + skipped_files) / total_vcons * 100))
+                    percentage_done = min(100, int((uploaded_files) / total_vcons * 100))
                     
                     progress_bar.progress(percentage_done, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
                         

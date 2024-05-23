@@ -54,10 +54,15 @@ st.divider()
 
 # Get the URL for the Redis instance
 redis_url = st.text_input("ENTER THE REDIS URL", value="redis://redis:6379", key="redis_url_export")
+redis_password = st.text_input("ENTER THE REDIS PASSWORD", key="redis_password_export")
+
 if redis_url:
     if st.button("EXPORT VCONS", key="export_redis"):
         # Connect to Redis
-        redis_client = redis.Redis.from_url(redis_url)
+        if redis_password:
+            redis_client = redis.Redis.from_url(redis_url, password=redis_password)
+        else:
+            redis_client = redis.Redis.from_url(redis_url)
         db = client[str(st.secrets["mongo_db"]["db"])]
         vcons = db[st.secrets["mongo_db"]["collection"]].find()
 
