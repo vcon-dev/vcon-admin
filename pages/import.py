@@ -8,6 +8,7 @@ import io
 import lib.common as common
 
 common.init_session_state()
+common.authenticate()
 common.sidebar()
 
 

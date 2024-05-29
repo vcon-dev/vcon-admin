@@ -1,12 +1,19 @@
 # Setup the session state for the app
 import streamlit as st
+import streamlit_authenticator as stauth
 import os
 import pymongo
+import yaml
+from yaml.loader import SafeLoader
+
+
+
+authenticator = None
 
 def init_session_state():
     if "vcon_uuids" not in st.session_state:
         st.session_state.vcon_uuids = []
-
+        
     # Setup the selected vCon
     if "selected_vcon" not in st.session_state:
         st.session_state.selected_vcon = None
@@ -14,7 +21,36 @@ def init_session_state():
         if hasattr(st, 'query_params'):
             if 'uuid' in st.query_params:
                 st.session_state.selected_vcon = st.query_params['uuid']
+                     
+def is_authenticated():
+    return st.session_state["authentication_status"]
 
+def authenticate():
+    global authenticator
+    
+    with open('user-credentials.yml') as file:
+        config = yaml.load(file, Loader=SafeLoader)
+
+    authenticator = stauth.Authenticate(
+        config['credentials'],
+        config['cookie']['name'],
+        config['cookie']['key'],
+        config['cookie']['expiry_days'],
+        config['pre-authorized'])
+    
+    try:    
+        authenticator.login()
+    except Exception as e:
+        st.error(f"Error: {e}")
+        st.write(st.session_state)
+    if st.session_state["authentication_status"] is False:
+        st.error('Username/password is incorrect')
+        st.stop()
+    elif st.session_state["authentication_status"] is None:
+        st.warning('Please enter your username and password')
+        st.stop()
+
+    
 def get_mongo_client():
     # Get the MongoDB connection
     url = st.secrets["mongo_db"]["url"]
@@ -43,35 +79,38 @@ def get_vcon(uuid):
     return collection.find_one({'uuid': uuid})
 
 def sidebar():
-    with st.sidebar:
-                    
-        banner = '''
-        * _Proudly Engineered in Boston by [Strolid's](http://strolid.ai) World Wide Team_
-        * _Interested in vCons? [Learn More](https://docs.vcon.dev)_
-        * _Looking for the IETF draft? [Read More](https://datatracker.ietf.org/doc/draft-petrie-vcon/)_
-        * _Looking for partners? [Contact Us](mailto:sales@strolid.com)_
-        * _Need help? [Support](mailto:support@strolid.com)_
-        '''
+        if authenticator and is_authenticated():
+            with st.sidebar:                        
+                banner = '''
+                * _Proudly Engineered in Boston by [Strolid's](http://strolid.ai) World Wide Team_
+                * _Interested in vCons? [Learn More](https://docs.vcon.dev)_
+                * _Looking for the IETF draft? [Read More](https://datatracker.ietf.org/doc/draft-petrie-vcon/)_
+                * _Looking for partners? [Contact Us](mailto:sales@strolid.com)_
+                * _Need help? [Support](mailto:support@strolid.com)_
+                '''
 
-        if os.path.isfile("custom_info.md"):
-            with st.expander("Help"):
-                # Open the file and read its contents
-                with open("custom_info.md", "r") as file:
-                    contents = file.read()
+                if os.path.isfile("custom_info.md"):
+                    with st.expander("Help"):
+                        # Open the file and read its contents
+                        with open("custom_info.md", "r") as file:
+                            contents = file.read()
 
-                    # Display the contents in the Streamlit app
-                    st.markdown(contents)
-        with st.expander("Danger Zone"):
-            # Enable the user to delete the database
-            if st.button("DELETE vCon DATABASE", key="delete_db", help="This will delete the entire database."):
-                client = get_mongo_client()
+                            # Display the contents in the Streamlit app
+                            st.markdown(contents)
+                    with st.expander("Danger Zone"):
+                        # Enable the user to delete the database
+                        if st.button("DELETE vCon DATABASE", key="delete_db", help="This will delete the entire database."):
+                            client = get_mongo_client()
 
-                # Get the database name
-                db_name = st.secrets["mongo_db"]["db"]
-                # Drop the database
-                client.drop_database(db_name)
-                # Display a success message
-                st.success("DATABASE DELETED")
+                            # Get the database name
+                            db_name = st.secrets["mongo_db"]["db"]
+                            # Drop the database
+                            client.drop_database(db_name)
+                            # Display a success message
+                            st.success("DATABASE DELETED")
 
-        st.markdown(banner)
+                st.markdown(banner)
+                st.write("Logged in as: ", st.session_state["username"])
+                authenticator.logout()
+
 

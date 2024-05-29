@@ -11,7 +11,9 @@ st.set_page_config(
 
 
 common.init_session_state()
+common.authenticate()
 common.sidebar()
+
 
 # Function to initialize the MongoDB connection
 def get_mongo_client():

@@ -3,7 +3,6 @@ import lib.common as common
 import os
 import json
 from datetime import datetime
-
 from openai import OpenAI
 
 client = OpenAI(
@@ -12,6 +11,7 @@ client = OpenAI(
   api_key=st.secrets["openai"]["testing_key"]
 )
 common.init_session_state()
+common.authenticate()
 common.sidebar()
 
 # Synchronize the vCons into Open AI

@@ -1,10 +1,11 @@
 import streamlit as st
 import pymongo
-import os
 import lib.common as common
 common.init_session_state()
+common.authenticate()
 common.sidebar()
 
+    
 """
 
 ## Admin Portal

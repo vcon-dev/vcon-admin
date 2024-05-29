@@ -5,6 +5,7 @@ import redis
 import lib.common as common
 import boto3
 common.init_session_state()
+common.authenticate()
 common.sidebar()
 
 

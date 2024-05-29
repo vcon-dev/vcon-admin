@@ -11,7 +11,9 @@ from elasticsearch.helpers import bulk
 from datetime import datetime
 
 common.init_session_state()
+common.authenticate()
 common.sidebar()
+
 
 # Title of the app
 st.title('ELASTICSEARCH')
