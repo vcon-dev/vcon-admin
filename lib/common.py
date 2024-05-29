@@ -5,7 +5,8 @@ import os
 import pymongo
 import yaml
 from yaml.loader import SafeLoader
-
+import redis
+from elasticsearch import Elasticsearch
 
 
 authenticator = None
@@ -77,6 +78,19 @@ def get_vcon(uuid):
     db = client.vcons
     collection = db.vcons
     return collection.find_one({'uuid': uuid})
+
+# Function to initialize the Elasticsearch connection
+def get_es_client():
+    url = st.secrets["elasticsearch"]["url"]
+    username = st.secrets["elasticsearch"]["username"]
+    password = st.secrets["elasticsearch"]["password"]
+    ca_certs = st.secrets["elasticsearch"].get("ca_certs", None)
+    
+    if ca_certs and os.path.exists(ca_certs):
+        return Elasticsearch(url, basic_auth=(username, password), ca_certs=ca_certs)
+    else:
+        return Elasticsearch(url, basic_auth=(username, password), verify_certs=False)
+
 
 def sidebar():
         if authenticator and is_authenticated():

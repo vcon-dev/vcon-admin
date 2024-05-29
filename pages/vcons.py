@@ -5,7 +5,7 @@ import lib.common as common
 import pandas as pd
 import pandas as pd
 st.set_page_config(
-    page_title="Info",
+    page_title="vCons",
     layout="wide"
 )
 

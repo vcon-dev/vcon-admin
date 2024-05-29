@@ -16,6 +16,7 @@ services:
       - "${VCON_ADMIN_EXTERNAL_PORT:-8501}:8501"
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - mongo
       - elasticsearch
