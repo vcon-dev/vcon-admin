@@ -73,9 +73,13 @@ df['link'] = df['uuid'].apply(lambda x: f'<a href="/inspect?uuid={x}">Details</a
 
 df = df.drop(columns=["parties"])
 df = df.drop(columns=["dialog"])
-df = df.drop(columns=["redacted"])
-df = df.drop(columns=["group"])
-df = df.drop(columns=["appended"])
+
+optional_columns = ["redacted", "group", "appended"]
+# If the column exists, remove it
+for col in optional_columns:
+    if col in df.columns:
+        df = df.drop(columns=col)
+        
 
 # Display dataframe with clickable links
 st.markdown(df.to_html(escape=False), unsafe_allow_html=True)
