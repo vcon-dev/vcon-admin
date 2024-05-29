@@ -56,7 +56,12 @@ documents = list(collection.find().skip(skip).limit(items_per_page))
 df = pd.DataFrame(documents)
 
 # Remove the analysis column
-df = df.drop(columns=["analysis", "attachments", "updated_at", "_id"])
+to_remove = ["analysis", "attachments", "updated_at", "_id", "vcon"]
+for col in to_remove:
+    if col in df.columns:
+        # Check to see if the column exists
+        if col in df.columns:
+            df = df.drop(columns=col)
 
 # Convert the created_at column to a datetime object
 df["created_at"] = df["created_at"].apply(lambda x: pd.to_datetime(x))
