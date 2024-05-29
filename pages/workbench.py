@@ -134,7 +134,11 @@ with prompt_tab:
     # Add a prompt, including system prompt, user prompt, model name and temperature
     system_prompt = st.text_area("SYSTEM PROMPT", "The following is a vCon conversation between two parties, captured in a JSON. The parties array is a list of participants; the dialog array are the recordings, emails and transcripts. The analysis array contains transcripts and summaries and other analysis types. The attachments array is a list of documents describing the context of the conversation.")
     user_prompt = st.text_area("USER PROMPT", "Summarize this conversation.")
-    model_names = ["gpt-4-1106-preview", "gpt-4", "gpt-4-32k", "gpt-3.5-turbo-1106", "gpt-3.5-turbo"]
+    # Fetch the model names from OpenAI
+    models = open_ai_client.models.list()    
+    model_names = [model.id for model in models]
+    # alphabetixe the model names
+    model_names.sort()
     model_name = st.selectbox("MODEL NAME", model_names)
     temperature = st.slider("TEMPERATURE", 0.0, 1.0, 0.5, 0.01)
     input_types = ["complete", "summary", "transcript"]

@@ -11,7 +11,14 @@ from elasticsearch import Elasticsearch
 
 authenticator = None
 
-def init_session_state():
+def init_session_state():    
+    # Set the document metadata
+    st.set_page_config(
+        page_title="vCon Admin",
+        page_icon="🦦",
+        layout="wide"
+    )
+    
     if "vcon_uuids" not in st.session_state:
         st.session_state.vcon_uuids = []
         

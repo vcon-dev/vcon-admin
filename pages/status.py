@@ -1,11 +1,6 @@
 import streamlit as st
 from streamlit_extras.streaming_write import write
 import lib.common as common
-st.set_page_config(
-    page_title="Status",
-    layout="wide"
-)
-
 
 common.init_session_state()
 common.authenticate()

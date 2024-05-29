@@ -4,11 +4,6 @@ import json
 import lib.common as common
 import pandas as pd
 import pandas as pd
-st.set_page_config(
-    page_title="vCons",
-    layout="wide"
-)
-
 
 common.init_session_state()
 common.authenticate()
@@ -78,6 +73,9 @@ df['link'] = df['uuid'].apply(lambda x: f'<a href="/inspect?uuid={x}">Details</a
 
 df = df.drop(columns=["parties"])
 df = df.drop(columns=["dialog"])
+df = df.drop(columns=["redacted"])
+df = df.drop(columns=["group"])
+df = df.drop(columns=["appended"])
 
 # Display dataframe with clickable links
 st.markdown(df.to_html(escape=False), unsafe_allow_html=True)
