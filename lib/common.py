@@ -99,7 +99,7 @@ def get_es_client():
 
 def get_conserver_config():
     # Get the config from the conserver API server
-    url = st.secrets["conserver"]["url"] + "/config"
+    url = st.secrets["conserver"]["api_url"] + "/config"
     auth_token = st.secrets["conserver"]["auth_token"]
     headers = {
         "Authorization": f"Bearer {auth_token}"
@@ -113,7 +113,11 @@ def get_conserver_config():
     
 def sidebar():
         if authenticator and is_authenticated():
-            with st.sidebar:                        
+            with st.sidebar:     
+                # If there's an conserver API URL, display it
+                if "conserver" in st.secrets:
+                    st.markdown(f"[Conserver API]({st.secrets['conserver']['api_url']}/docs)")
+                                       
                 banner = '''
                 * _Proudly Engineered in Boston by [Strolid's](http://strolid.ai) World Wide Team_
                 * _Interested in vCons? [Learn More](https://docs.vcon.dev)_
