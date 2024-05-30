@@ -5,9 +5,8 @@ import os
 import pymongo
 import yaml
 from yaml.loader import SafeLoader
-import redis
 from elasticsearch import Elasticsearch
-
+import requests
 
 authenticator = None
 
@@ -98,7 +97,20 @@ def get_es_client():
     else:
         return Elasticsearch(url, basic_auth=(username, password), verify_certs=False)
 
-
+def get_conserver_config():
+    # Get the config from the conserver API server
+    url = st.secrets["conserver"]["url"] + "/config"
+    auth_token = st.secrets["conserver"]["auth_token"]
+    headers = {
+        "Authorization": f"Bearer {auth_token}"
+    }
+    
+    # Get the config from the conserver API server
+    response = requests.get(url, headers)
+    # Check if the response was successful
+    if response.status_code == 200:
+        return response.json()
+    
 def sidebar():
         if authenticator and is_authenticated():
             with st.sidebar:                        
