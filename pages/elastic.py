@@ -82,8 +82,7 @@ def search_vcons(query, es_client):
     body = {
         "query": {
             "multi_match": {
-                "query": query,
-                "fields": ["parties.name", "dialog.text", "analysis.body", "summary", "transcript", "attachments.name"]
+                "query": query
             }
         }
     }
