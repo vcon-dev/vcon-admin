@@ -26,7 +26,9 @@ _Tested on clean  4 GB Memory / 2 Intel vCPUs / 120 GB Disk / NYC3 - Ubuntu 24.0
   5) vim .streamlit/secrets.toml
   6) docker network create conserver
   7) docker compose up -d
-  8) Visit http://localhost:8501
+  8) docker exec -it elasticsearch /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
+  9) _(Update secrets.toml with new elastic search passsword)_ vim .streamlit/secrets.toml
+  9) Visit http://localhost:8501
 
 ## Sample secrets.toml
 
