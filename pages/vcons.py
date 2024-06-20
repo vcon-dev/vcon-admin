@@ -32,6 +32,10 @@ client = get_mongo_client()
 db = client[st.secrets["mongo_db"]["db"]]
 collection = db[st.secrets["mongo_db"]["collection"]]
 vcon_count = collection.count_documents({})
+if vcon_count == 0:
+    st.error("No VCONs found in the database")
+    st.stop()
+    
 vcons = collection.find({})
 
 st.title(f"VCON INFO: {vcon_count} vcons")
