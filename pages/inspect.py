@@ -2,6 +2,8 @@ import streamlit as st
 import pymongo
 import json
 import lib.common as common
+import pickle
+
 common.init_session_state()
 common.authenticate()
 common.sidebar()
@@ -36,9 +38,11 @@ if st.session_state.selected_vcon:
     vcon = db[st.secrets["mongo_db"]["collection"]].find_one({'uuid': st.session_state.selected_vcon})
 
     # ADD A BUTTON FOR DOWNLOADING THE VCON as JSON
+        
+    serialized_data = pickle.dumps(vcon)
     download = st.download_button(
         label="DOWNLOAD VCON",
-        data=json.dumps(vcon),
+        data=serialized_data,
         file_name=f"{st.session_state.selected_vcon}.json",
         mime="application/json"
     )
