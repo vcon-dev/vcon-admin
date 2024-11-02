@@ -44,6 +44,7 @@ with upload_tab:
         if st.button("UPLOAD AND INSERT"):
             db = client[st.secrets["mongo_db"]['db']]
             collection = db[st.secrets["mongo_db"]['collection']]
+            print(f"UPLOADING to MongoDB: {uploaded_files}, {db}, {collection}")
             for uploaded_file in uploaded_files:
                 try:
                     document = json.load(uploaded_file)
@@ -52,6 +53,10 @@ with upload_tab:
                 except json.JSONDecodeError as e:
                     st.warning("INVALID JSON")
                     st.error(e)
+                except UnicodeDecodeError as e:
+                    st.warning("INVALID UTF-8")
+                    st.error(e)
+                
 
 with upload_zip_tab:
     "**UPLOAD ZIP FILE**"
@@ -216,10 +221,8 @@ with s3_tab:
                     else:
                         skipped_files += 1
                     # Calculate the percentage of vCons uploaded, maximum 100%
-                    percentage_done = min(100, int((uploaded_files) / total_vcons * 100))
-                    
-                    progress_bar.progress(percentage_done, f"{uploaded_files} UPLOADED, {skipped_files} SKIPPED")
-                        
+                    percentage_done = min(100, int((uploaded_files) / total_vcons * 100))                    
+                    progress_bar.progress(percentage_done, text=key)
             st.success(f"UPLOADED {uploaded_files}, SKIPPED: {skipped_files}")
 
 st.divider()
