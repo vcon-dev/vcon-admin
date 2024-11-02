@@ -68,11 +68,14 @@ df["created_at"] = df["created_at"].apply(lambda x: pd.to_datetime(x))
 
 # Extract the from each dialog object the total duration
 df["total_duration"] = df["dialog"].apply(
-    lambda x: sum([int(dialog["duration"]) for dialog in x])
+    lambda x: sum([int(dialog.get("duration", 0)) for dialog in x])
 )
 
 # Extract the names, tel and email addresses from parties
 df["party_names"] = df["parties"].apply(lambda x: parties_as_markdown(x))
+
+# Count the number of dialogs in each vcon
+df["dialog_count"] = df["dialog"].apply(lambda x: len(x))
 
 df["link"] = df["uuid"].apply(lambda x: f'<a href="/inspect?uuid={x}">Details</a>')
 
