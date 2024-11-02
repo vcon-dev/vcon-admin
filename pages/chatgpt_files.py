@@ -11,6 +11,8 @@ client = OpenAI(
     project=st.secrets["openai"]["project"],
     api_key=st.secrets["openai"]["testing_key"],
 )
+
+default_model = st.secrets["openai"].get("model", "gpt-4o-mini")
 common.init_session_state()
 common.authenticate()
 common.sidebar()
@@ -38,6 +40,13 @@ with upload:
 
     # Make a dropdown for the vector store. Use the API to get the vector stores, and then populate the dropdown
     vector_stores = client.beta.vector_stores.list()
+    
+    # If there are no vector stores, create one
+    if not vector_stores.data:
+        st.write("No vector stores found. Creating one.")
+        vector_store = client.beta.vector_stores.create(name="vcons")
+        vector_stores = client.beta.vector_stores.list()
+        
 
     # Use the human readable name for the dropdown
     vector_store_names = [vector_store.name for vector_store in vector_stores.data]
@@ -139,6 +148,14 @@ today = datetime.today().strftime("%Y-%m-%d")
 
 # Make a list of the available assistants
 assistants = client.beta.assistants.list()
+
+# If there are no assistants, create one
+if not assistants.data:
+    st.write("No assistants found. Creating one.")
+    assistant = client.beta.assistants.create(name="assistant", model=default_model)
+    assistants = client.beta.assistants.list()
+
+# Use the human readable name for the dropdown
 assistant_names = [assistant.name for assistant in assistants.data]
 assistant_name = st.selectbox("Assistant", assistant_names)
 
