@@ -1,0 +1,64 @@
+
+entryPoints:
+  web:
+    address: ":80"
+    # # Redirect HTTP to HTTPS
+    # http:
+    #   redirections:
+    #     entryPoint:
+    #       to: websecure
+    #       scheme: https
+  
+  websecure:
+    address: ":443"
+
+# Configure ACME (Let's Encrypt): automatic SSL/TLS certificates
+certificatesResolvers:
+  myresolver:
+    acme:
+      # Email address for Let's Encrypt notifications
+      email: thomas.howe@strolid.com
+      # Storage for ACME certificates
+      storage: /etc/traefik/acme.json
+      # Use HTTP-01 challenge
+      httpChallenge:
+        entryPoint: web
+      # Alternatively, use DNS challenge (required for wildcard certificates)
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   resolvers:
+      #     - "1.1.1.1:53"
+      #     - "8.8.8.8:53"
+
+# Enable Traefik dashboard
+# The dashboard is a simple web interface to monitor and debug your reverse proxy
+# It is not recommended to expose the dashboard to the public internet
+api:
+  # Enable the dashboard
+  dashboard: true
+  # Disable secure communication (HTTPS)
+  # This is not recommended for production use
+  insecure: true
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+
+
+middlewares:
+  auth-middleware:
+    basicAuth:
+      users:
+        # Generated using htpasswd -nb user password
+        - "admin:$apr1$ruca84Hq$mbjdMZBAG.KWn7vfN/SNK/"  # username: admin, password: password
+
+accessLog: {}
+
+log:
+  level: TRACE  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: COMMON  # common, json, logfmt
+

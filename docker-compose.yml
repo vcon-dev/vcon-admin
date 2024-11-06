@@ -1,19 +1,10 @@
-# Use root/example as user/password credentials
-version: '3.1'
-
-networks:
-  conserver:
-    external: true
-
 services:
-  vcon-admin:
+  admin:
     container_name: "admin"
     build:
       dockerfile: ./Dockerfile
       context: .
-    command: "streamlit run ./admin.py"
-    ports:
-      - "${VCON_ADMIN_EXTERNAL_PORT:-8501}:8501"
+    command: "streamlit run ./admin.py --server.baseUrlPath='/admin'"
     volumes:
       - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -21,8 +12,13 @@ services:
       - mongo
       - elasticsearch
     stop_grace_period: 60s
-    networks:
-      - conserver
+    profiles:
+      - dev
+      - prod
+      - standalone
+    labels:
+      - "traefik.http.routers.admin.rule=PathPrefix(`/admin`)"
+      - "traefik.http.routers.admin.middlewares=auth-middleware@file"      
 
   mongo:
     container_name: "mongo"
@@ -31,24 +27,29 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
       MONGO_INITDB_ROOT_PASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
-    networks:
-      - conserver
     volumes:
       - mongo-data:/data/db
-
+    profiles:
+      - prod
+      - standalone
+  
   mongo-express:
     container_name: "mongo-express"
     image: mongo-express
     restart: always
-    ports:
-      - 8081:8081
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
       ME_CONFIG_MONGODB_ADMINPASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
       ME_CONFIG_MONGODB_URL: "${MONGO_URL:-mongodb://root:example@mongo:27017/}"
       ME_CONFIG_BASICAUTH: false
-    networks:
-      - conserver
+      ME_CONFIG_SITE_BASEURL: "/mongoadmin"
+    profiles:
+      - dev
+      - standalone  
+    labels:
+      - "traefik.http.routers.mongo-express.rule=PathPrefix(`/mongoadmin`)"
+      - "traefik.http.routers.mongo-express.middlewares=auth-middleware@file"
+
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
@@ -59,12 +60,37 @@ services:
       - ELASTIC_USERNAME="${ELASTIC_USERNAME:-elastic}"
       - ELASTIC_PASSWORD="${ELASTIC_PASSWORD:-changeme}"
     mem_limit: 1g
-    ports:
-      - 9200:9200
     volumes:
       - es_data:/usr/share/elasticsearch/data
-    networks:
-      - conserver
+    profiles:
+      - dev
+      - standalone
+
+
+  traefik:
+    # The official v3 Traefik docker image
+    image: traefik:v3.2
+    container_name: "traefik"
+    # Enables the web UI and tells Traefik to listen to docker
+    command: 
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--providers.file.directory=/etc/traefik/dynamic" 
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - ./traefik.yml:/etc/traefik/traefik.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dynamic:/etc/traefik/dynamic
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.docker.localhost`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      
 
 volumes:
   es_data:

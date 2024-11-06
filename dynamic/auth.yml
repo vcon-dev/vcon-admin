@@ -1,0 +1,7 @@
+http:
+  middlewares:
+    auth-middleware:
+      basicAuth:
+        users:
+          # Generated using htpasswd -nb user password
+          - "admin:$apr1$A0km.ToD$Bu6JV/yORpIQo9Q0VRnZw0"  # username: admin, password: password
