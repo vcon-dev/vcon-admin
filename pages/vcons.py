@@ -26,10 +26,15 @@ def parties_as_markdown(parties):
     return party_str
 
 
-client = get_mongo_client()
-db = client[st.secrets["mongo_db"]["db"]]
-collection = db[st.secrets["mongo_db"]["collection"]]
-vcon_count = collection.count_documents({})
+try:
+    client = get_mongo_client()
+    db = client[st.secrets["mongo_db"]["db"]]
+    collection = db[st.secrets["mongo_db"]["collection"]]
+    vcon_count = collection.count_documents({})
+except pymongo.errors.ServerSelectionTimeoutError:
+    st.error("Unable to connect to mongo database")
+    st.stop()
+
 if vcon_count == 0:
     st.error("No VCONs found in the database")
     st.stop()
