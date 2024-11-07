@@ -17,7 +17,10 @@ services:
       - prod
       - standalone
     labels:
-      - "traefik.http.routers.admin.rule=PathPrefix(`/admin`)"
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin.rule=Host(`${DNS_HOST}`)  || PathPrefix(`/`) "
+      - "traefik.http.routers.admin.entrypoints=websecure"
+      - "traefik.http.routers.admin.tls.certresolver=myresolver"
       - "traefik.http.routers.admin.middlewares=auth-middleware@file"      
 
   mongo:
@@ -76,9 +79,16 @@ services:
       - "--api.insecure=true"
       - "--providers.docker"
       - "--providers.file.directory=/etc/traefik/dynamic" 
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=${DNS_REGISTRATION_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+
     ports:
       # The HTTP port
       - "80:80"
+      - "443:443"
       # The Web UI (enabled by --api.insecure=true)
       - "8080:8080"
     volumes:
@@ -86,10 +96,12 @@ services:
       - ./traefik.yml:/etc/traefik/traefik.yml
       - /var/run/docker.sock:/var/run/docker.sock
       - ./dynamic:/etc/traefik/dynamic
+      - "./letsencrypt:/letsencrypt"
+
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.docker.localhost`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.docker.localhost`) || PathPrefix(`/traefik`) "
+      - "traefik.http.routers.traefik.service=api@internal"
       
 
 volumes:
