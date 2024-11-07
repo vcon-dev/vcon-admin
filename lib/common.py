@@ -1,6 +1,5 @@
 # Setup the session state for the app
 import streamlit as st
-import streamlit_authenticator as stauth
 import os
 import pymongo
 import yaml
