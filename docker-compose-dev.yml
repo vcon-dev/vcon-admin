@@ -1,0 +1,21 @@
+services:
+  admin:
+    container_name: "admin"
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    command: "streamlit run ./admin.py"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    stop_grace_period: 60s
+    ports:
+      - "8501:8501"   
+
+
+volumes:
+  es_data:
+    driver: local
+  mongo-data:
+    driver: local
+
