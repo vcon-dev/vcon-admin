@@ -5,7 +5,6 @@ import lib.common as common
 import pickle
 
 common.init_session_state()
-common.authenticate()
 common.sidebar()
 
 # Title and page layout

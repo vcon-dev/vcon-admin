@@ -4,7 +4,6 @@ import lib.common as common
 import pandas as pd
 
 common.init_session_state()
-common.authenticate()
 common.sidebar()
 
 

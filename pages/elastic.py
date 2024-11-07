@@ -12,7 +12,6 @@ from datetime import datetime
 from lib.common import get_es_client
 
 common.init_session_state()
-common.authenticate()
 common.sidebar()
 
 

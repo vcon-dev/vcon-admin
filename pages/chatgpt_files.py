@@ -14,7 +14,6 @@ client = OpenAI(
 
 default_model = st.secrets["openai"].get("model", "gpt-4o-mini")
 common.init_session_state()
-common.authenticate()
 common.sidebar()
 
 # Synchronize the vCons into Open AI
