@@ -32,7 +32,7 @@ def load_and_insert_file(file):
 client = init_connection()
 st.header('IMPORT')
 
-tab_names= ["IMPORT ONE", "IMPORT ZIP", "IMPORT JSONL", "IMPORT URL", "IMPORT TEXT", "IMPORT REDIS", "IMPORT S3"]
+tab_names= ["IMPORT FILE", "IMPORT ZIP", "IMPORT JSONL", "IMPORT URL", "IMPORT TEXT", "IMPORT REDIS", "IMPORT S3"]
 upload_tab, upload_zip_tab, jsonl_tab, url_tab, text_tab, redis_tab, s3_tab = st.tabs(tab_names)
 
 with upload_tab:
