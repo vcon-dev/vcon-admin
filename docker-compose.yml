@@ -31,7 +31,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
       MONGO_INITDB_ROOT_PASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
     volumes:
-      - mongo-data:/data/db
+      - .data/db:/data/db
     profiles:
       - prod
       - standalone
