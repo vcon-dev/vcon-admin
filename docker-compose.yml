@@ -1,28 +1,4 @@
 services:
-  admin:
-    container_name: "admin"
-    build:
-      dockerfile: ./Dockerfile
-      context: .
-    command: "streamlit run ./admin.py --server.baseUrlPath='/admin'"
-    volumes:
-      - .:/app
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - mongo
-      - elasticsearch
-    stop_grace_period: 60s
-    profiles:
-      - dev
-      - prod
-      - standalone
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.admin.rule=Host(`${DNS_HOST}`)  || PathPrefix(`/`) "
-      - "traefik.http.routers.admin.entrypoints=websecure"
-      - "traefik.http.routers.admin.tls.certresolver=myresolver"
-      - "traefik.http.routers.admin.middlewares=auth-middleware@file"      
-
   mongo:
     container_name: "mongo"
     image: mongo
@@ -30,11 +6,15 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: "${MONGO_INITDB_ROOT_USERNAME:-root}"
       MONGO_INITDB_ROOT_PASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
+    ports:
+      - "27017:27017"
     volumes:
       - .data/db:/data/db
     profiles:
       - prod
       - standalone
+    networks:
+      - conserver
   
   mongo-express:
     container_name: "mongo-express"
@@ -45,13 +25,21 @@ services:
       ME_CONFIG_MONGODB_ADMINPASSWORD: "${MONGO_INITDB_ROOT_PASSWORD:-example}"
       ME_CONFIG_MONGODB_URL: "${MONGO_URL:-mongodb://root:example@mongo:27017/}"
       ME_CONFIG_BASICAUTH: false
-      ME_CONFIG_SITE_BASEURL: "/mongoadmin"
+      ME_CONFIG_SITE_BASEURL: "/mongo-express"
+    ports:
+      - "8081:8081"
     profiles:
       - dev
       - standalone  
     labels:
-      - "traefik.http.routers.mongo-express.rule=PathPrefix(`/mongoadmin`)"
+      - "traefik.enable=true"
+      - "traefik.http.routers.mongo-express.entrypoints=websecure"
+      - "traefik.http.routers.mongo-express.tls.certresolver=myresolver"
+      - "traefik.http.routers.mongo-express.rule=Host(`${DNS_HOST}`) && PathPrefix(`/mongo-express`)"
       - "traefik.http.routers.mongo-express.middlewares=auth-middleware@file"
+      - "traefik.http.services.mongo-express.loadbalancer.server.port=8081"  # Add this label
+    networks:
+      - conserver
 
 
   elasticsearch:
@@ -68,7 +56,33 @@ services:
     profiles:
       - dev
       - standalone
+    networks:
+      - conserver
 
+  metabase:
+    image: metabase/metabase:latest
+    container_name: "metabase"
+    profiles:
+      - dev
+      - standalone
+    ports:
+      - "3000:3000"
+    environment:
+      - MB_SITE_URL=https://thynkforward.demos.strolid.net/metabase
+      - MB_DB_FILE=/metabase-data/metabase.db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.metabase.loadbalancer.server.port=3000"  # Add this label
+      - "traefik.http.routers.metabase.rule=Host(`${DNS_HOST}`) && PathPrefix(`/metabase/`)"
+      - "traefik.http.routers.metabase.entrypoints=websecure"
+      - "traefik.http.routers.metabase.tls.certresolver=myresolver"
+      - "traefik.http.middlewares.strip-metabase-prefix.stripprefix.prefixes=/metabase"
+      - "traefik.http.routers.metabase.middlewares=auth-middleware@file,strip-metabase-prefix"
+      - "traefik.http.routers.metabase.priority=20"  # Add this to metabase labels
+    networks:
+      - conserver
+    volumes:
+      - .metabase-data:/metabase-data
 
   traefik:
     # The official v3 Traefik docker image
@@ -100,9 +114,41 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.docker.localhost`) || PathPrefix(`/traefik`) "
+      - "traefik.http.routers.traefik.rule=PathPrefix(`/traefik`) "
       - "traefik.http.routers.traefik.service=api@internal"
-      
+
+    networks:
+      - conserver
+
+  admin:
+    container_name: "admin"
+    build:
+      dockerfile: ./Dockerfile
+      context: .
+    command: "streamlit run ./admin.py --server.port 8501 --server.baseUrlPath /admin"
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - mongo
+      - elasticsearch
+    stop_grace_period: 60s
+    profiles:
+      - dev
+      - prod
+      - standalone
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin.rule=Host(`${DNS_HOST}`) && PathPrefix(`/admin`) "
+      - "traefik.http.routers.admin.entrypoints=websecure"
+      - "traefik.http.routers.admin.tls.certresolver=myresolver"
+      - "traefik.http.routers.admin.middlewares=auth-middleware@file"      
+      - "traefik.http.services.admin.loadbalancer.server.port=8501"
+    networks:
+      - conserver
+
 
 volumes:
   es_data:
@@ -110,3 +156,7 @@ volumes:
   mongo-data:
     driver: local
 
+# docker-compose-1.yml
+networks:
+  conserver:
+    external: true
