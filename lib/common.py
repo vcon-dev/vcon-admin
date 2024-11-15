@@ -73,14 +73,18 @@ def get_conserver_config():
     url = st.secrets["conserver"]["api_url"] + "/config"
     auth_token = st.secrets["conserver"]["auth_token"]
     headers = {
-        "Authorization": f"Bearer {auth_token}"
+        "x-conserver-api-token": f"{auth_token}",
+        "accept": "application/json"
     }
     
     # Get the config from the conserver API server
-    response = requests.get(url, headers)
+    response = requests.get(url, headers=headers)
+    
     # Check if the response was successful
     if response.status_code == 200:
         return response.json()
+    else:
+        return None
     
 def sidebar():
     with st.sidebar:     
