@@ -206,4 +206,3 @@ volumes:
 # docker-compose-1.yml
 networks:
   conserver:
-    external: true
