@@ -1,39 +1,50 @@
+# ------------------------------------------------------------------------------
 # Stage 1: Build
-FROM chainguard/python:latest-dev@sha256:e22e86b81a5ef8bf50ed6899e5d55ae44725791febde5a67bc2e8afd5939bad6 AS builder
+# ------------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
 
-# Set the working directory
 WORKDIR /app
+USER root
 
-# Copy only the files necessary for dependency installation
-COPY requirements.txt /app/
+# Install build dependencies including Rust
+RUN apt-get update && apt-get install -y \
+    gcc make git curl bash && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+
+# Add Cargo to PATH (avoid using source)
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+
+# Verify Rust installation 
+RUN bash -c "cargo --version"
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/usr/local python3 -
+
+# Copy your project files for the build
+COPY pyproject.toml poetry.lock* /app/
 COPY custom_info.md /app/
 
-# Install dependencies
-USER root
-RUN apk add --no-cache gcc
-RUN pip install --no-cache-dir -r requirements.txt
+# Install all dependencies
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-interaction
 
+# ------------------------------------------------------------------------------
 # Stage 2: Runtime
-FROM chainguard/python:latest@sha256:b69271bb5c3f06f5afa4c40a77867784e907408ab991e4d6e907f5aa796b87b8
+# ------------------------------------------------------------------------------
+FROM python:3.12-slim
 
-# Set the working directory
 WORKDIR /app
 
-# Copy pre-installed dependencies from the builder stage
-COPY --from=builder /app/ /app/
+# Copy installed site-packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-# Add application code
+# Copy your actual application code
 COPY . /app
 
-# Update PATH to include dependencies
-ENV PYTHONPATH="/app/dependencies:$PYTHONPATH"
-ENV PATH="/app/dependencies/bin:$PATH"
-
-# Expose necessary port
+# Expose a server port (e.g. if using Streamlit)
 EXPOSE 8501
 
-# Define default environment variable
-ENV NAME World
-
-# Run admin.py when the container launches
+# Run your app
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
