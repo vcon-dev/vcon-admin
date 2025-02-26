@@ -1,7 +1,6 @@
 # This file takes the local vCons and indexes them in Elasticsearch. It also provides a search interface for the vCons.
 #
 import streamlit as st
-import pymongo
 import json
 import lib.common as common
 import requests
@@ -17,12 +16,6 @@ common.sidebar()
 
 # Title of the app
 st.title('ELASTICSEARCH')
-
-# Function to initialize the MongoDB connection
-def get_mongo_client():
-    url = st.secrets["mongo_db"]["url"]
-    return pymongo.MongoClient(url)
-
 
 # Function to search for vCons in Elasticsearch
 def search_vcons(query, es_client):

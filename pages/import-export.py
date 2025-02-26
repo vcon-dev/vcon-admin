@@ -1,5 +1,4 @@
 import streamlit as st
-import pymongo
 import json
 import redis
 import boto3
@@ -10,26 +9,19 @@ import lib.common as common
 common.init_session_state()
 common.sidebar()
 
+# No need for init_connection as we're using common.get_mongo_client now
 
-# Initialize connection.
-# Uses st.cache_resource to only run once.
-@st.cache_resource
-def init_connection():
-    url = st.secrets["mongo_db"]["url"]
-    return pymongo.MongoClient(url)
-
-@st.cache(allow_output_mutation=True)
+@common.mongo_error_handler
 def load_and_insert_file(file):
     try:
         document = json.load(file)
+        collection = common.get_vcon_collection()
         collection.replace_one({'_id': document['uuid']}, document, upsert=True)
     except json.JSONDecodeError as e:
-        st.warning(f"SKIPPED INVALID JSON, FILE {filename}")
+        st.warning(f"SKIPPED INVALID JSON")
         return False
     return True
 
-
-client = init_connection()
 st.header('IMPORT')
 
 tab_names= ["IMPORT FILE", "IMPORT ZIP", "IMPORT JSONL", "IMPORT URL", "IMPORT TEXT", "IMPORT REDIS", "IMPORT S3"]
@@ -41,9 +33,7 @@ with upload_tab:
     uploaded_files = st.file_uploader("UPLOAD", type=["json", "vcon"], accept_multiple_files=True)
     if uploaded_files is not None:
         if st.button("UPLOAD AND INSERT"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
-            print(f"UPLOADING to MongoDB: {uploaded_files}, {db}, {collection}")
+            collection = common.get_vcon_collection()
             for uploaded_file in uploaded_files:
                 try:
                     document = json.load(uploaded_file)
@@ -55,7 +45,6 @@ with upload_tab:
                 except UnicodeDecodeError as e:
                     st.warning("INVALID UTF-8")
                     st.error(e)
-                
 
 with upload_zip_tab:
     "**UPLOAD ZIP FILE**"
@@ -63,8 +52,7 @@ with upload_zip_tab:
     uploaded_file = st.file_uploader("UPLOAD ZIP", type="zip")
     if uploaded_file is not None:
         if st.button("UPLOAD AND INSERT", key="upload_zip"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
             z = zipfile.ZipFile(io.BytesIO(uploaded_file.read()))
             vcons_uploaded = 0
             
@@ -83,8 +71,6 @@ with upload_zip_tab:
                             continue
             st.success(f"INSERTED {vcons_uploaded} SUCCESSFULLY!")
 
-
-
 with jsonl_tab:
     "**UPLOAD BULK VCON**"
 
@@ -92,8 +78,7 @@ with jsonl_tab:
 
     if uploaded_file is not None:
         if st.button("UPLOAD AND INSERT"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
             for i, line in enumerate(uploaded_file):
                 try:
                     document = json.loads(line)
@@ -109,8 +94,7 @@ with url_tab:
     url = st.text_input("ENTER URL")
     if url:
         if st.button("IMPORT", key="import_url"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
             try:
                 document = json.load(url)
                 collection.replace_one({'_id': document['uuid']}, document, upsert=True)
@@ -125,8 +109,7 @@ with text_tab:
     text = st.text_area("ENTER TEXT")
     if text:
         if st.button("IMPORT", key="import_text"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
             try:
                 document = json.loads(text)
                 collection.replace_one({'_id': document['uuid']}, document, upsert=True)
@@ -142,8 +125,7 @@ with redis_tab:
     redis_password = st.text_input("ENTER REDIS PASSWORD")
     if redis_url:
         if st.button("IMPORT", key="import_redis"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
 
             # Connect to the REDIS server, and find all the keys with the pattern "vcon:*"
             if redis_password:
@@ -171,8 +153,7 @@ with s3_tab:
     s3_path = st.text_input("ENTER S3 PATH")
     if s3_bucket:
         if st.button("IMPORT", key="import_s3"):
-            db = client[st.secrets["mongo_db"]['db']]
-            collection = db[st.secrets["mongo_db"]['collection']]
+            collection = common.get_vcon_collection()
             s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, region_name=AWS_DEFAULT_REGION)
 
             # Connect to the S3 bucket and find all the keys with the pattern "vcon:*"
@@ -242,8 +223,8 @@ with export_tab:
     if exporting: 
         # streamlit_app.py
         with st.spinner("EXPORTING VCONS"):
-            db = client[str(st.secrets["mongo_db"]["db"])]
-            vcons = db[st.secrets["mongo_db"]["collection"]].find()
+            collection = common.get_vcon_collection()
+            vcons = collection.find()
             if output_format == "JSONL":
                 # Open a file for writing in JSONL format
                 with open(f"{path}output.jsonl", "w") as file:
@@ -274,11 +255,11 @@ with export_redis_tab:
                 redis_client = redis.Redis.from_url(redis_url, password=redis_password)
             else:
                 redis_client = redis.Redis.from_url(redis_url)
-            db = client[str(st.secrets["mongo_db"]["db"])]
-            vcons = db[st.secrets["mongo_db"]["collection"]].find()
+            collection = common.get_vcon_collection()
+            vcons = collection.find()
 
             # So we can show progress, count the number of vCons
-            count = db[st.secrets["mongo_db"]["collection"]].count_documents({})
+            count = collection.count_documents({})
             st.write(f"EXPORTING {count} VCONS")
             # Show progress
             progress_bar = st.progress(0)
@@ -300,11 +281,11 @@ with export_s3_tab:
         if st.button("EXPORT VCONS", key="export_s3"):
             # Connect to S3
             s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY, region_name=AWS_DEFAULT_REGION)
-            db = client[str(st.secrets["mongo_db"]["db"])]
-            vcons = db[st.secrets["mongo_db"]["collection"]].find()
+            collection = common.get_vcon_collection()
+            vcons = collection.find()
 
             # Count the number of vCons we're exporting overall
-            count = db[st.secrets["mongo_db"]["collection"]].count_documents({})
+            count = collection.count_documents({})
             st.write(f"EXPORTING {count} VCONS")
             # Show progress
             progress_bar = st.progress(0)

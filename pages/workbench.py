@@ -1,7 +1,7 @@
 import streamlit as st
-import pymongo
 import json
 import lib.common as common
+
 common.init_session_state()
 common.sidebar()
 
@@ -15,12 +15,7 @@ open_ai_client = OpenAI(
 # Title and page layout
 st.title("VCON WORKBENCH")
 
-# Function to initialize the MongoDB connection
-def get_mongo_client():
-    url = st.secrets["mongo_db"]["url"]
-    return pymongo.MongoClient(url)
-
-# Functin to return the summary of a vCon if it's available
+# Function to return the summary of a vCon if it's available
 def get_vcon_summary(vcon):
     if vcon:
         analysis = vcon.get('analysis', [])
@@ -69,13 +64,12 @@ with vcon_tab:
 
         summary_only = st.checkbox("ONLY PICK VCONS WITH SUMMARIES")
 
-        # Get a random vCon from the database
-        mongo_client = get_mongo_client()
-        db = mongo_client[st.secrets["mongo_db"]["db"]]
+        # Get a random vCon from the database using common module
+        collection = common.get_vcon_collection()
         if summary_only:
-            vcon = db[st.secrets["mongo_db"]["collection"]].aggregate([{'$match': {'analysis.type': 'summary'}}, {'$sample': {'size': 1}}]) 
+            vcon = collection.aggregate([{'$match': {'analysis.type': 'summary'}}, {'$sample': {'size': 1}}]) 
         else:
-            vcon = db[st.secrets["mongo_db"]["collection"]].aggregate([{'$sample': {'size': 1}}])
+            vcon = collection.aggregate([{'$sample': {'size': 1}}])
         vcon = list(vcon)[0]
 
         # Show the summary of the vCon, if it's available.
@@ -106,12 +100,9 @@ with vcon_tab:
     st.divider()
     st.subheader(f"CURRENT VCON INPUTS ({len(vcon_uuids)})")
 
-    mongo_client = get_mongo_client()
-    db = mongo_client[st.secrets["mongo_db"]["db"]]
-
     for vcon_uuid in vcon_uuids:
         st.markdown(f"**vCon UUID**: {vcon_uuid}")
-        vcon = db[st.secrets["mongo_db"]["collection"]].find_one({'uuid': vcon_uuid})
+        vcon = common.get_vcon(vcon_uuid)
         # Show the summary of the vCon, if it's available.
         summary = get_vcon_summary(vcon)
         if summary:
@@ -166,9 +157,7 @@ with results_tab:
                 """)
         for vcon_uuid in vcon_uuids:
             # Get the content, either the transcript or the summary or the dialog
-            mongo_client = get_mongo_client()
-            db = mongo_client[st.secrets["mongo_db"]["db"]]
-            vcon = db[st.secrets["mongo_db"]["collection"]].find_one({'uuid': vcon_uuid})
+            vcon = common.get_vcon(vcon_uuid)
             match input_type:
                 case "complete":
                     content = json.dumps(vcon)

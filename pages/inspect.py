@@ -1,5 +1,4 @@
 import streamlit as st
-import pymongo
 import json
 import lib.common as common
 import pickle
@@ -10,12 +9,7 @@ common.sidebar()
 # Title and page layout
 st.title("VCON INSPECTOR")
 
-# Function to initialize the MongoDB connection
-def get_mongo_client():
-    url = st.secrets["mongo_db"]["url"]
-    return pymongo.MongoClient(url)
-
-# Functin to return the summary of a vCon if it's available
+# Function to return the summary of a vCon if it's available
 def get_vcon_summary(vcon):
     if vcon:
         analysis = vcon.get('analysis', [])
@@ -23,18 +17,14 @@ def get_vcon_summary(vcon):
             if a.get('type') == 'summary':
                 return a.get('body')
     return None
-
-
     
 selected_vcon = st.text_input("ENTER A VCON ID", value=st.session_state.selected_vcon)
 if selected_vcon:
     st.session_state.selected_vcon = selected_vcon
 
-
 if st.session_state.selected_vcon:
-    client = get_mongo_client()
-    db = client[st.secrets["mongo_db"]["db"]]
-    vcon = db[st.secrets["mongo_db"]["collection"]].find_one({'uuid': st.session_state.selected_vcon})
+    # Using the common module function instead of direct connection
+    vcon = common.get_vcon(st.session_state.selected_vcon)
 
     # ADD A BUTTON FOR DOWNLOADING THE VCON as JSON
         
