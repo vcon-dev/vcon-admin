@@ -214,45 +214,76 @@ with load_tab:
     else:
         selected_collection = st.selectbox("Select Collection", collections)
         
+        # Add loading mode selection
+        loading_mode = st.radio(
+            "Loading Mode", 
+            ["Load All vCons", "Load Only Missing vCons"],
+            help="Choose to load all vCons or only add those missing in Milvus"
+        )
+        
         if st.button("Load vCons"):
             vcons = common.get_vcons()
             
             if not vcons:
                 st.warning("No vCons found in the database.")
             else:
-                with st.status(f"Loading {len(vcons)} vCons into Milvus") as status:
+                # Get existing vCon UUIDs from Milvus if in "missing only" mode
+                existing_uuids = set()
+                if loading_mode == "Load Only Missing vCons":
                     collection = Collection(selected_collection)
                     collection.load()
                     
-                    data = []
-                    for i, vcon in enumerate(vcons):
-                        # Extract text from vCon
-                        text = extract_text_from_vcon(vcon)
+                    # Query to get all existing UUIDs
+                    results = collection.query(
+                        expr="vcon_uuid != ''",
+                        output_fields=["vcon_uuid"]
+                    )
+                    existing_uuids = {r['vcon_uuid'] for r in results}
+                    st.info(f"Found {len(existing_uuids)} existing vCons in Milvus")
+                
+                # Filter vCons if in "missing only" mode
+                if loading_mode == "Load Only Missing vCons":
+                    to_process = [vcon for vcon in vcons if vcon["uuid"] not in existing_uuids]
+                    st.info(f"Found {len(to_process)} vCons to add to Milvus")
+                else:
+                    to_process = vcons
+                
+                if not to_process:
+                    st.success("No new vCons to add. All vCons already exist in Milvus!")
+                else:
+                    with st.status(f"Loading {len(to_process)} vCons into Milvus") as status:
+                        collection = Collection(selected_collection)
+                        collection.load()
                         
-                        # Get party identifier
-                        party_id = vcon.get("parties", [{}])[0].get("partyId", "") if vcon.get("parties") else ""
+                        data = []
+                        for i, vcon in enumerate(to_process):
+                            # Extract text from vCon
+                            text = extract_text_from_vcon(vcon)
+                            
+                            # Get party identifier
+                            party_id = vcon.get("parties", [{}])[0].get("partyId", "") if vcon.get("parties") else ""
+                            
+                            # Get embedding
+                            embedding = get_embedding(text)
+                            
+                            # Prepare data for insertion
+                            data.append({
+                                "vcon_uuid": vcon["uuid"],
+                                "party_id": party_id,
+                                "text": text,
+                                "embedding": embedding
+                            })
+                            
+                            # Update status
+                            status.update(label=f"Processed {i+1}/{len(to_process)} vCons")
+                            
+                            # Insert in batches of 100 to avoid memory issues
+                            if len(data) >= 100 or i == len(to_process) - 1:
+                                collection.insert(data)
+                                data = []
                         
-                        # Get embedding
-                        embedding = get_embedding(text)
-                        
-                        # Prepare data for insertion
-                        data.append({
-                            "vcon_uuid": vcon["uuid"],
-                            "party_id": party_id,
-                            "text": text,
-                            "embedding": embedding
-                        })
-                        
-                        # Update status
-                        status.update(label=f"Processed {i+1}/{len(vcons)} vCons")
-                        
-                        # Insert in batches of 100 to avoid memory issues
-                        if len(data) >= 100 or i == len(vcons) - 1:
-                            collection.insert(data)
-                            data = []
-                    
-                    collection.flush()
-                    st.success(f"Successfully loaded {len(vcons)} vCons into Milvus!")
+                        collection.flush()
+                        st.success(f"Successfully loaded {len(to_process)} vCons into Milvus!")
 
 with search_tab:
     st.header("Search vCons")
@@ -290,25 +321,40 @@ with search_tab:
             
             for i, hits in enumerate(results):
                 for hit in hits:
-                    # Access fields from the correct location - the fields dictionary
-                    fields = hit.entity.fields if hasattr(hit.entity, 'fields') else {}
-                    
-                    # Get data from the fields dictionary
-                    vcon_uuid = fields.get('vcon_uuid', 'Unknown')
-                    party_id = fields.get('party_id', 'N/A')
-                    text_content = fields.get('text', '')
+                    # Access the entity data correctly - Milvus returns entity as a dict-like object
+                    # Try multiple access patterns to handle different Milvus SDK versions
+                    if hasattr(hit, 'entity') and isinstance(hit.entity, dict):
+                        # Direct dictionary access for newer SDK versions
+                        vcon_uuid = hit.entity.get('vcon_uuid', 'Unknown')
+                        party_id = hit.entity.get('party_id', 'N/A')
+                        text_content = hit.entity.get('text', '')
+                    elif hasattr(hit, 'entity') and hasattr(hit.entity, 'fields'):
+                        # Access through fields attribute for some SDK versions
+                        fields = hit.entity.fields
+                        vcon_uuid = fields.get('vcon_uuid', 'Unknown')
+                        party_id = fields.get('party_id', 'N/A')
+                        text_content = fields.get('text', '')
+                    else:
+                        # Fallback for other SDK versions
+                        vcon_uuid = getattr(hit, 'vcon_uuid', 'Unknown')
+                        party_id = getattr(hit, 'party_id', 'N/A')
+                        text_content = getattr(hit, 'text', '')
                     
                     with st.expander(f"Score: {hit.score:.4f}, UUID: {vcon_uuid}"):
                         st.write(f"**Party ID:** {party_id}")
                         st.write("**Text:**")
                         st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
                         
-                        # Keep debug info for now
-                        st.write("---")
-                        st.write("**Debug Info:**")
+                        # Add a link to view the full vCon
+                        if vcon_uuid != 'Unknown':
+                            st.markdown(f"[View full vCon](/vcon_viewer?uuid={vcon_uuid})")
+                        
+                        # Keep debug info but make it less prominent
                         st.write(f"Entity type: {type(hit.entity)}")
-                        if hasattr(hit.entity, 'fields'):
-                            st.write(f"Fields: {hit.entity.fields}")
+                        st.write(f"Entity content: {hit.entity}")
+                        st.write(f"Hit attributes: {dir(hit)}")
+                        st.write(f"Hit type: {type(hit)}")
+                        st.write(f"Query embedding: {query_embedding}")
 
 with delete_tab:
     st.header("Delete Collection")
