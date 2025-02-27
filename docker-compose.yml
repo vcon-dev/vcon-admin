@@ -42,48 +42,6 @@ services:
       - conserver
 
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: "elasticsearch"
-    environment:
-      - node.name=elasticsearch
-      - discovery.type=single-node
-      - ELASTIC_USERNAME="${ELASTIC_USERNAME:-elastic}"
-      - ELASTIC_PASSWORD="${ELASTIC_PASSWORD:-changeme}"
-    mem_limit: 1g
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-    profiles:
-      - dev
-      - standalone
-    networks:
-      - conserver
-
-  metabase:
-    image: metabase/metabase:latest
-    container_name: "metabase"
-    profiles:
-      - dev
-      - standalone
-    ports:
-      - "3000:3000"
-    environment:
-      - MB_SITE_URL=https://mindmakingportal.demos.strolid.net/metabase
-      - MB_DB_FILE=/metabase-data/metabase.db
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.metabase.loadbalancer.server.port=3000"  # Add this label
-      - "traefik.http.routers.metabase.rule=Host(`${DNS_HOST}`) && PathPrefix(`/metabase/`)"
-      - "traefik.http.routers.metabase.entrypoints=websecure"
-      - "traefik.http.routers.metabase.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.strip-metabase-prefix.stripprefix.prefixes=/metabase"
-      - "traefik.http.routers.metabase.middlewares=auth-middleware@file,strip-metabase-prefix"
-      - "traefik.http.routers.metabase.priority=20"  # Add this to metabase labels
-    networks:
-      - conserver
-    volumes:
-      - .metabase-data:/metabase-data
-
   traefik:
     # The official v3 Traefik docker image
     image: traefik:v3.2
@@ -98,6 +56,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${DNS_REGISTRATION_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      #- "--certificatesresolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
 
     ports:
       # The HTTP port
@@ -110,7 +69,7 @@ services:
       - ./traefik.yml:/etc/traefik/traefik.yml
       - /var/run/docker.sock:/var/run/docker.sock
       - ./dynamic:/etc/traefik/dynamic
-      - "./letsencrypt:/letsencrypt"
+      - letsencrypt:/letsencrypt
 
     labels:
       - "traefik.enable=true"
@@ -133,7 +92,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - mongo
-      - elasticsearch
     stop_grace_period: 60s
     profiles:
       - dev
@@ -149,50 +107,6 @@ services:
     networks:
       - conserver
 
-  wordpress:
-      image: wordpress:latest
-      container_name: "wordpress"
-      restart: always
-      environment:
-        - WORDPRESS_DB_HOST=wordpress-db
-        - WORDPRESS_DB_USER=${WORDPRESS_DB_USER:-wordpress}
-        - WORDPRESS_DB_PASSWORD=${WORDPRESS_DB_PASSWORD:-wordpress_password}
-        - WORDPRESS_DB_NAME=${WORDPRESS_DB_NAME:-wordpress}
-      volumes:
-        - wordpress_data:/var/www/html
-      depends_on:
-        - wordpress-db
-      profiles:
-        - prod
-        - standalone
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.wordpress.rule=Host(`${DNS_HOST}`)"
-        - "traefik.http.routers.wordpress.entrypoints=websecure"
-        - "traefik.http.routers.wordpress.tls.certresolver=myresolver"
-        - "traefik.http.services.wordpress.loadbalancer.server.port=80"
-        - "traefik.http.routers.wordpress.priority=10"
-      networks:
-        - conserver
-
-  wordpress-db:
-    image: mysql:8.0
-    container_name: "wordpress-db"
-    restart: always
-    environment:
-      - MYSQL_DATABASE=${WORDPRESS_DB_NAME:-wordpress}
-      - MYSQL_USER=${WORDPRESS_DB_USER:-wordpress}
-      - MYSQL_PASSWORD=${WORDPRESS_DB_PASSWORD:-wordpress_password}
-      - MYSQL_RANDOM_ROOT_PASSWORD=yes
-    volumes:
-      - wordpress_db_data:/var/lib/mysql
-    profiles:
-      - prod
-      - standalone
-    networks:
-      - conserver
-
-
 volumes:
   es_data:
     driver: local
@@ -201,6 +115,8 @@ volumes:
   wordpress_data:
     driver: local
   wordpress_db_data:
+    driver: local
+  letsencrypt:
     driver: local
 
 # docker-compose-1.yml

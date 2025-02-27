@@ -159,3 +159,5 @@ custom_info.md
 user-credentials.yml
 
 .vscode
+
+volumes/
