@@ -7,6 +7,8 @@ import time
 from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
 from openai import OpenAI
 from datetime import datetime
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Initialize session state and sidebar - MUST be called before any other st commands
 common.init_session_state()
@@ -21,6 +23,16 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("milvus_vcon")
+
+# Initialize active tab tracking in session state
+if 'active_tab_index' not in st.session_state:
+    st.session_state.active_tab_index = 0
+
+# Initialize save operation status in session state
+if 'save_status' not in st.session_state:
+    st.session_state.save_status = None
+    st.session_state.save_error = None
+    st.session_state.save_message = None
 
 # Initialize OpenAI client for embeddings
 @st.cache_resource
@@ -46,6 +58,27 @@ milvus_port = st.secrets.get("milvus", {}).get("port", "19530")
 # Default embedding dimensions for OpenAI embeddings (text-embedding-3-small is 1536 dimensions)
 EMBEDDING_DIM = 1536
 
+# Function to ensure Milvus connection is established
+def ensure_milvus_connection():
+    try:
+        # Check if connection exists by attempting a simple operation
+        utility.list_collections()
+    except Exception as e:
+        st.write(f"Reconnecting to Milvus: {e}")
+        try:
+            # Attempt to disconnect first in case there's a stale connection
+            try:
+                connections.disconnect("default")
+            except:
+                pass
+            # Connect to Milvus
+            connections.connect(host=milvus_host, port=milvus_port)
+            return True
+        except Exception as e:
+            st.error(f"Failed to connect to Milvus: {e}")
+            return False
+    return True
+
 # Connect to Milvus
 try:
     connections.connect(host=milvus_host, port=milvus_port)
@@ -54,8 +87,8 @@ except Exception as e:
     st.error(f"Failed to connect to Milvus: {e}")
 
 # Create tabs for different operations
-tabs = ["Create Collection", "Load vCons", "Search", "Delete Collection", "List Collections"]
-create_tab, load_tab, search_tab, delete_tab, list_tab = st.tabs(tabs)
+tabs = ["Create Collection", "Load vCons", "Search", "Delete Collection", "List Collections", "Debug Embedding"]
+create_tab, load_tab, search_tab, delete_tab, list_tab, debug_tab = st.tabs(tabs)
 
 # Function to get embedding from OpenAI
 @st.cache_data(ttl="1h", show_spinner=False)
@@ -169,6 +202,152 @@ def extract_text_from_vcon(vcon):# -> str | LiteralString | Any:
     logger.info(f"Total processing time for vCon {vcon_id}: {total_time:.2f}s")
     return raw_text
 
+# Function to extract party ID from vCon with better handling
+def extract_party_id(vcon):
+    """Extract a meaningful party identifier from a vCon based on standard vCon structure"""
+    logger.debug(f"Extracting party ID from vCon {vcon.get('uuid', 'unknown')}")
+    
+    if not vcon.get("parties"):
+        logger.debug("No parties array found in vCon")
+        # Try alternative fields if parties is not available
+        if vcon.get("metadata", {}).get("creator"):
+            return vcon["metadata"]["creator"]
+        return "no_party_info"
+    
+    # Try to find a non-empty party ID from any party in the array
+    for party in vcon["parties"]:
+        # First priority: UUID as it's unique
+        if party.get("uuid"):
+            logger.debug(f"Using party UUID: {party['uuid']}")
+            return party["uuid"]
+        
+        # Second priority: Contact methods (tel, mailto)
+        if party.get("tel"):
+            logger.debug(f"Using party telephone: {party['tel']}")
+            return f"tel:{party['tel']}"
+        
+        if party.get("mailto"):
+            logger.debug(f"Using party email: {party['mailto']}")
+            return f"mailto:{party['mailto']}"
+        
+        # Third priority: Name and role combined
+        if party.get("name") and party.get("role"):
+            combined = f"{party['role']}:{party['name']}"
+            logger.debug(f"Using party role+name: {combined}")
+            return combined
+        
+        # Fourth priority: Just name or role
+        if party.get("name"):
+            logger.debug(f"Using party name: {party['name']}")
+            return party["name"]
+        
+        if party.get("role"):
+            logger.debug(f"Using party role: {party['role']}")
+            return party["role"]
+        
+        # Fifth priority: Any other unique identifier in the party object
+        for field in ["partyId", "PartyId", "party_id", "id", "userID", "userId"]:
+            if party.get(field):
+                logger.debug(f"Found non-standard ID {party[field]} using field {field}")
+                return party[field]
+    
+    # If we got here but have parties, use the first party's index as identifier
+    if vcon["parties"]:
+        logger.debug("No explicit identifiers found, using party index")
+        return f"party_index:0"
+    
+    logger.debug("No usable party identifier found")
+    return "unknown_party"
+
+# Function to handle the Milvus save operation outside the main app flow
+def save_to_milvus(collection_name, vcon, party_id, text, embedding):
+    try:
+        vcon_uuid = vcon["uuid"]  # Extract UUID from the vCon object
+        logger.info(f"Starting save operation for vCon {vcon_uuid} to collection {collection_name}")
+        
+        # Ensure Milvus connection
+        connection_status = ensure_milvus_connection()
+        if not connection_status:
+            st.session_state.save_status = "error"
+            st.session_state.save_error = "Failed to establish Milvus connection"
+            logger.error("Milvus connection failed during save_to_milvus function")
+            return False
+        
+        # Validate collection exists
+        if not utility.has_collection(collection_name):
+            st.session_state.save_status = "error"
+            st.session_state.save_error = f"Collection {collection_name} no longer exists"
+            logger.error(f"Collection {collection_name} does not exist in save_to_milvus function")
+            return False
+        
+        # Load collection
+        collection = Collection(collection_name)
+        collection.load()
+        
+        # Validate embedding
+        if not isinstance(embedding, list) or len(embedding) != EMBEDDING_DIM:
+            error_msg = f"Invalid embedding format: expected list with {EMBEDDING_DIM} dimensions"
+            st.session_state.save_status = "error"
+            st.session_state.save_error = error_msg
+            logger.error(error_msg)
+            return False
+        
+        # Extract key metadata from the vCon object and ensure they are strings
+        metadata = vcon.get("metadata", {})
+        created_at = str(metadata.get("created_at", "")) if metadata.get("created_at") is not None else ""
+        updated_at = str(metadata.get("updated_at", "")) if metadata.get("updated_at") is not None else ""
+        subject = str(vcon.get("subject", "")) if vcon.get("subject") is not None else ""
+        title = str(metadata.get("title", "")) if metadata.get("title") is not None else ""
+        
+        # Content indicators
+        has_transcript = bool(vcon.get("transcript"))
+        has_summary = bool(vcon.get("summary"))
+        party_count = len(vcon.get("parties", []))
+        
+        # Ensure party_id is a string
+        party_id = str(party_id) if party_id is not None else ""
+        
+        # Ensure text is a string 
+        text = str(text) if text is not None else ""
+        
+        # Prepare and insert data
+        data = [{
+            "vcon_uuid": vcon_uuid,
+            "party_id": party_id,
+            "text": text,
+            "embedding": embedding,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "subject": subject,
+            "metadata_title": title,
+            "has_transcript": has_transcript,
+            "has_summary": has_summary,
+            "party_count": party_count,
+            "embedding_model": "text-embedding-3-small",
+            "embedding_version": "1.0"
+        }]
+        
+        # Log the data types being inserted
+        logger.debug(f"Data types for insertion: vcon_uuid: {type(vcon_uuid)}, subject: {type(subject)}, text: {type(text)} (length: {len(text)})")
+        
+        # Insert and flush
+        insert_result = collection.insert(data)
+        logger.info(f"Insert result: {insert_result}")
+        
+        flush_result = collection.flush()
+        logger.info(f"Flush result: {flush_result}")
+        
+        st.session_state.save_status = "success"
+        st.session_state.save_message = f"Successfully saved vCon {vcon_uuid} to Milvus!"
+        logger.info(f"Successfully saved vCon {vcon_uuid} to collection {collection_name}")
+        return True
+        
+    except Exception as e:
+        logger.exception(f"Exception in save_to_milvus function: {str(e)}")
+        st.session_state.save_status = "error"
+        st.session_state.save_error = str(e)
+        return False
+
 with create_tab:
     st.header("Create a New Collection")
     
@@ -184,7 +363,16 @@ with create_tab:
                 FieldSchema(name="vcon_uuid", dtype=DataType.VARCHAR, max_length=100),
                 FieldSchema(name="party_id", dtype=DataType.VARCHAR, max_length=100),
                 FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBEDDING_DIM)
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBEDDING_DIM),
+                FieldSchema(name="created_at", dtype=DataType.VARCHAR, max_length=30),
+                FieldSchema(name="updated_at", dtype=DataType.VARCHAR, max_length=30),
+                FieldSchema(name="subject", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="metadata_title", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="has_transcript", dtype=DataType.BOOL),
+                FieldSchema(name="has_summary", dtype=DataType.BOOL),
+                FieldSchema(name="party_count", dtype=DataType.INT16),
+                FieldSchema(name="embedding_model", dtype=DataType.VARCHAR, max_length=50),
+                FieldSchema(name="embedding_version", dtype=DataType.VARCHAR, max_length=20),
             ]
             
             schema = CollectionSchema(fields=fields, description="vCons collection for semantic search")
@@ -207,12 +395,15 @@ with create_tab:
 with load_tab:
     st.header("Load vCons into Milvus")
     
+    # Ensure Milvus connection is active
+    ensure_milvus_connection()
+    
     # Get available collections
     collections = utility.list_collections()
     if not collections:
         st.warning("No collections found. Please create a collection first.")
     else:
-        selected_collection = st.selectbox("Select Collection", collections)
+        selected_collection = st.selectbox("Select Collection", collections, key="load_collection_select")
         
         # Add loading mode selection
         loading_mode = st.radio(
@@ -221,69 +412,194 @@ with load_tab:
             help="Choose to load all vCons or only add those missing in Milvus"
         )
         
-        if st.button("Load vCons"):
+        # Add limit parameter
+        limit_col1, limit_col2 = st.columns([3, 1])
+        with limit_col1:
+            st.write("Limit the number of vCons to process (0 = no limit)")
+        with limit_col2:
+            vcon_limit = st.number_input("Max vCons", min_value=0, value=0, step=10, help="Set a limit on how many vCons to process. Use 0 for no limit.")
+        
+        # Function to handle batch loading
+        def load_vcons_to_milvus():
             vcons = common.get_vcons()
             
             if not vcons:
                 st.warning("No vCons found in the database.")
-            else:
-                # Get existing vCon UUIDs from Milvus if in "missing only" mode
-                existing_uuids = set()
-                if loading_mode == "Load Only Missing vCons":
+                return
+            
+            # Apply limit if specified
+            if vcon_limit > 0 and len(vcons) > vcon_limit:
+                logger.info(f"Limiting vCon processing to {vcon_limit} out of {len(vcons)} total vCons")
+                st.info(f"Processing {vcon_limit} out of {len(vcons)} available vCons (limit applied)")
+                vcons = vcons[:vcon_limit]
+                
+            # Ensure connection is active right before querying
+            connection_status = ensure_milvus_connection()
+            if not connection_status:
+                st.error("Failed to establish Milvus connection. Cannot proceed with loading operation.")
+                logger.error("Milvus connection failed during load operation")
+                return
+                
+            # Verify collection still exists
+            if not utility.has_collection(selected_collection):
+                st.error(f"Collection {selected_collection} no longer exists or is not accessible")
+                logger.error(f"Collection {selected_collection} does not exist at load time")
+                return
+                
+            # Get existing vCon UUIDs from Milvus if in "missing only" mode
+            existing_uuids = set()
+            if loading_mode == "Load Only Missing vCons":
+                try:
+                    logger.info(f"Loading collection {selected_collection} to check existing vCons")
                     collection = Collection(selected_collection)
                     collection.load()
                     
                     # Query to get all existing UUIDs
+                    logger.info("Querying for existing vCon UUIDs")
                     results = collection.query(
                         expr="vcon_uuid != ''",
                         output_fields=["vcon_uuid"]
                     )
                     existing_uuids = {r['vcon_uuid'] for r in results}
+                    logger.info(f"Found {len(existing_uuids)} existing vCons in Milvus")
                     st.info(f"Found {len(existing_uuids)} existing vCons in Milvus")
+                except Exception as e:
+                    logger.exception(f"Error querying existing vCons: {str(e)}")
+                    st.error(f"Error querying existing vCons: {str(e)}")
+                    with st.expander("Exception Details", expanded=True):
+                        st.exception(e)
+                    return
+            
+            # Filter vCons if in "missing only" mode
+            if loading_mode == "Load Only Missing vCons":
+                to_process = [vcon for vcon in vcons if vcon["uuid"] not in existing_uuids]
+                logger.info(f"Found {len(to_process)} vCons to add to Milvus")
+                st.info(f"Found {len(to_process)} vCons to add to Milvus")
+            else:
+                to_process = vcons
+            
+            if not to_process:
+                st.success("No new vCons to add. All vCons already exist in Milvus!")
+                return
                 
-                # Filter vCons if in "missing only" mode
-                if loading_mode == "Load Only Missing vCons":
-                    to_process = [vcon for vcon in vcons if vcon["uuid"] not in existing_uuids]
-                    st.info(f"Found {len(to_process)} vCons to add to Milvus")
-                else:
-                    to_process = vcons
+            # Create a fresh collection reference for insertion
+            try:
+                collection = Collection(selected_collection)
+                collection.load()
+            except Exception as e:
+                logger.exception(f"Error loading collection for insertion: {str(e)}")
+                st.error(f"Error loading collection for insertion: {str(e)}")
+                with st.expander("Exception Details", expanded=True):
+                    st.exception(e)
+                return
                 
-                if not to_process:
-                    st.success("No new vCons to add. All vCons already exist in Milvus!")
-                else:
-                    with st.status(f"Loading {len(to_process)} vCons into Milvus") as status:
-                        collection = Collection(selected_collection)
-                        collection.load()
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # Process in batches
+            batch_size = 100
+            total_success = 0
+            total_failed = 0
+            
+            for batch_start in range(0, len(to_process), batch_size):
+                batch_end = min(batch_start + batch_size, len(to_process))
+                batch = to_process[batch_start:batch_end]
+                
+                status_text.text(f"Processing batch {batch_start//batch_size + 1}/{(len(to_process)-1)//batch_size + 1} ({batch_start+1}-{batch_end}/{len(to_process)})")
+                
+                # Prepare batch data
+                data = []
+                batch_failed = 0
+                
+                for i, vcon in enumerate(batch):
+                    try:
+                        # Extract text from vCon
+                        text = extract_text_from_vcon(vcon)
                         
-                        data = []
-                        for i, vcon in enumerate(to_process):
-                            # Extract text from vCon
-                            text = extract_text_from_vcon(vcon)
-                            
-                            # Get party identifier
-                            party_id = vcon.get("parties", [{}])[0].get("partyId", "") if vcon.get("parties") else ""
-                            
-                            # Get embedding
-                            embedding = get_embedding(text)
-                            
-                            # Prepare data for insertion
-                            data.append({
-                                "vcon_uuid": vcon["uuid"],
-                                "party_id": party_id,
-                                "text": text,
-                                "embedding": embedding
-                            })
-                            
-                            # Update status
-                            status.update(label=f"Processed {i+1}/{len(to_process)} vCons")
-                            
-                            # Insert in batches of 100 to avoid memory issues
-                            if len(data) >= 100 or i == len(to_process) - 1:
-                                collection.insert(data)
-                                data = []
+                        # Get party identifier with better extraction
+                        party_id = extract_party_id(vcon)
                         
+                        # Get embedding
+                        embedding = get_embedding(text)
+                        
+                        # Validate embedding
+                        if not isinstance(embedding, list) or len(embedding) != EMBEDDING_DIM:
+                            error_msg = f"Invalid embedding for vCon {vcon['uuid']}: expected list with {EMBEDDING_DIM} dimensions"
+                            logger.error(error_msg)
+                            batch_failed += 1
+                            continue
+                        
+                        # Extract key metadata and ensure they are strings
+                        metadata = vcon.get("metadata", {})
+                        created_at = str(metadata.get("created_at", "")) if metadata.get("created_at") is not None else ""
+                        updated_at = str(metadata.get("updated_at", "")) if metadata.get("updated_at") is not None else ""
+                        subject = str(vcon.get("subject", "")) if vcon.get("subject") is not None else ""
+                        title = str(metadata.get("title", "")) if metadata.get("title") is not None else ""
+                        
+                        # Content indicators
+                        has_transcript = bool(vcon.get("transcript"))
+                        has_summary = bool(vcon.get("summary"))
+                        party_count = len(vcon.get("parties", []))
+                        
+                        # Ensure party_id is a string
+                        party_id = str(party_id) if party_id is not None else ""
+                        
+                        # Ensure text is a string
+                        text = str(text) if text is not None else ""
+                        
+                        # Prepare enriched data object
+                        data.append({
+                            "vcon_uuid": vcon["uuid"],
+                            "party_id": party_id,
+                            "text": text,
+                            "embedding": embedding,
+                            "created_at": created_at,
+                            "updated_at": updated_at,
+                            "subject": subject,
+                            "metadata_title": title,
+                            "has_transcript": has_transcript,
+                            "has_summary": has_summary,
+                            "party_count": party_count,
+                            "embedding_model": "text-embedding-3-small",
+                            "embedding_version": "1.0"
+                        })
+                        
+                    except Exception as e:
+                        logger.exception(f"Error processing vCon {vcon.get('uuid', 'unknown')}: {str(e)}")
+                        batch_failed += 1
+                
+                # Insert batch if we have data
+                if data:
+                    try:
+                        logger.info(f"Inserting batch of {len(data)} vCons")
+                        insert_result = collection.insert(data)
+                        logger.info(f"Insert result: {insert_result}")
                         collection.flush()
-                        st.success(f"Successfully loaded {len(to_process)} vCons into Milvus!")
+                        total_success += len(data)
+                    except Exception as e:
+                        logger.exception(f"Error inserting batch: {str(e)}")
+                        st.error(f"Error inserting batch: {str(e)}")
+                        with st.expander(f"Batch {batch_start//batch_size + 1} Error Details", expanded=False):
+                            st.exception(e)
+                        total_failed += len(data)
+                
+                total_failed += batch_failed
+                
+                # Update progress
+                progress = (batch_end) / len(to_process)
+                progress_bar.progress(progress)
+            
+            # Final update
+            if total_failed > 0:
+                st.warning(f"Completed with {total_success} vCons loaded successfully and {total_failed} failures.")
+                logger.warning(f"Completed with {total_success} vCons loaded successfully and {total_failed} failures.")
+            else:
+                st.success(f"Successfully loaded {total_success} vCons into Milvus!")
+                logger.info(f"Successfully loaded {total_success} vCons into Milvus!")
+        
+        if st.button("Load vCons", key="load_vcons_button"):
+            with st.spinner("Processing vCons..."):
+                load_vcons_to_milvus()
 
 with search_tab:
     st.header("Search vCons")
@@ -292,7 +608,7 @@ with search_tab:
     if not collections:
         st.warning("No collections found. Please create a collection first.")
     else:
-        selected_collection = st.selectbox("Select Collection for Search", collections)
+        selected_collection = st.selectbox("Select Collection for Search", collections, key="search_collection_select")
         search_text = st.text_input("Search Query")
         top_k = st.slider("Number of Results", min_value=1, max_value=50, value=5)
         
@@ -363,7 +679,7 @@ with delete_tab:
     if not collections:
         st.warning("No collections found.")
     else:
-        collection_to_delete = st.selectbox("Select Collection to Delete", collections)
+        collection_to_delete = st.selectbox("Select Collection to Delete", collections, key="delete_collection_select")
         
         if st.button("Delete Collection"):
             confirm = st.text_input("Type the collection name to confirm deletion")
@@ -411,4 +727,157 @@ with list_tab:
                         st.error(f"Failed to get statistics: {e}")
 
 # Close Milvus connection when app is done
-connections.disconnect("default") 
+# connections.disconnect("default")
+
+# Add Debug Embedding tab functionality
+with debug_tab:
+    # Track that we're in the debug tab
+    st.session_state.active_tab_index = 5
+    
+    st.header("Debug Embedding Generation")
+    st.write("Test embedding generation for a single vCon and optionally save it to a Milvus collection.")
+    
+    # Display save operation status if it exists
+    if st.session_state.save_status == "success":
+        st.success(st.session_state.save_message)
+        # Clear the status after displaying
+        st.session_state.save_status = None
+    elif st.session_state.save_status == "error":
+        st.error(f"Error saving to Milvus: {st.session_state.save_error}")
+        # Show detailed error in an expander
+        with st.expander("Error Details", expanded=True):
+            st.write(st.session_state.save_error)
+        # Clear the status after displaying
+        st.session_state.save_status = None
+    
+    # Get all vCons for selection
+    vcons = common.get_vcons()
+    
+    if not vcons:
+        st.warning("No vCons found in the database. Please add vCons first.")
+    else:
+        # Store embedding in session state to persist across reruns
+        if 'current_embedding' not in st.session_state:
+            st.session_state.current_embedding = None
+            st.session_state.current_raw_text = None
+            st.session_state.current_vcon = None
+        
+        # Create a dropdown to select a vCon by UUID + metadata
+        vcon_options = {f"{v.get('uuid', 'unknown')} - {v.get('metadata', {}).get('title', 'No Title')}": v 
+                        for v in vcons}
+        
+        selected_vcon_key = st.selectbox(
+            "Select a vCon to embed", 
+            options=list(vcon_options.keys()),
+            help="Choose a vCon from the dropdown to generate and view its embedding",
+            key="debug_vcon_select"
+        )
+        
+        selected_vcon = vcon_options[selected_vcon_key] if selected_vcon_key else None
+        
+        if selected_vcon:
+            # Display the original vCon before embedding
+            with st.expander("View Original vCon JSON", expanded=False):
+                st.json(selected_vcon)
+        
+        # Function to generate embedding and store in session state
+        def generate_embedding():
+            st.session_state.current_vcon = selected_vcon
+            st.session_state.current_raw_text = extract_text_from_vcon(selected_vcon)
+            st.session_state.current_embedding = get_embedding(st.session_state.current_raw_text)
+            logger.info(f"Generated embedding for vCon {selected_vcon['uuid']} with dimensions {len(st.session_state.current_embedding)}")
+        
+        # Generate embedding on button click
+        if selected_vcon and st.button("Generate Embedding", key="debug_generate_button", on_click=generate_embedding if selected_vcon else None):
+            # The actual work happens in the on_click callback
+            pass
+        
+        # If we have an embedding in session state, display it
+        if st.session_state.current_embedding is not None and st.session_state.current_vcon is not None:
+            # Extract and display the raw text
+            raw_text = st.session_state.current_raw_text
+            
+            st.subheader("Extracted Text")
+            st.text_area("Text used for embedding", raw_text, height=200, key="debug_extracted_text")
+            
+            # Get embedding from session state
+            embedding = st.session_state.current_embedding
+            
+            st.subheader("Generated Embedding")
+            
+            # Display embedding stats
+            st.write(f"Embedding dimensions: {len(embedding)}")
+            st.write(f"Embedding type: {type(embedding)}")
+            
+            # Calculate and display basic stats about the embedding vector
+            embedding_array = np.array(embedding)
+            
+            stats_col1, stats_col2, stats_col3 = st.columns(3)
+            with stats_col1:
+                st.metric("Min value", f"{embedding_array.min():.6f}")
+            with stats_col2:
+                st.metric("Max value", f"{embedding_array.max():.6f}")
+            with stats_col3:
+                st.metric("Mean value", f"{embedding_array.mean():.6f}")
+            
+            # Visualize the embedding distribution with a histogram
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.hist(embedding_array, bins=50)
+            ax.set_title("Embedding Value Distribution")
+            ax.set_xlabel("Value")
+            ax.set_ylabel("Frequency")
+            st.pyplot(fig)
+            
+            # Show first few values of the embedding vector
+            with st.expander("View embedding vector (first 20 values)"):
+                st.write(embedding[:20])
+            
+            # Optionally save to a collection
+            st.subheader("Save to Milvus")
+            
+            # Ensure Milvus connection is active before listing collections
+            ensure_milvus_connection()
+            collections = utility.list_collections()
+            
+            # Log available collections
+            logger.info(f"Available collections for saving: {collections}")
+            
+            if collections:
+                # Create UI for saving to Milvus
+                save_col1, save_col2 = st.columns([3, 1])
+                
+                with save_col1:
+                    save_collection = st.selectbox(
+                        "Select Collection", 
+                        collections, 
+                        key="debug_save_collection_select"
+                    )
+                
+                # Function to handle save button click
+                def save_button_callback():
+                    logger.info(f"Save button clicked for vCon {st.session_state.current_vcon['uuid']}")
+                    
+                    # Get party identifier with better extraction
+                    party_id = extract_party_id(st.session_state.current_vcon)
+                    
+                    # Execute save operation via the helper function - passing the full vCon object
+                    save_to_milvus(
+                        save_collection,
+                        st.session_state.current_vcon,  # Pass the complete vCon object
+                        party_id,
+                        st.session_state.current_raw_text,
+                        st.session_state.current_embedding
+                    )
+                
+                with save_col2:
+                    st.button(
+                        "Save to Milvus", 
+                        key="debug_save_button", 
+                        on_click=save_button_callback,
+                        disabled=st.session_state.current_embedding is None
+                    )
+            else:
+                st.warning("No collections found. Create a collection first to save this embedding.")
+                logger.warning("Attempted to save embedding but no collections exist")
+            
+            st.success("Embedding generation completed!") 
