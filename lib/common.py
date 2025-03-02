@@ -39,6 +39,16 @@ def init_session_state():
                 st.session_state.selected_vcon = st.query_params['uuid']
                      
     
+def convert_to_isoformat(vcon_doc):
+    """Convert the created_at and dialog.start to isoformat."""
+    if 'created_at' in vcon_doc:
+        vcon_doc['created_at'] = vcon_doc['created_at'].isoformat()
+    if 'dialog' in vcon_doc:
+        for dialog in vcon_doc['dialog']:
+            if 'start' in dialog:
+                dialog['start'] = dialog['start'].isoformat()
+    return vcon_doc
+
 def get_mongo_client():
     """Get or create a MongoDB client with connection pooling."""
     global _mongo_client
@@ -106,13 +116,19 @@ def get_vcons(since=None, limit=None, sort_by="created_at", sort_order="descendi
     if limit:
         cursor = cursor.limit(limit)
     
-    return list(cursor)
+    vcons = list(cursor)
+    for vcon in vcons:
+        convert_to_isoformat(vcon)
+    return vcons
+
 
 @mongo_error_handler
 def get_vcon(uuid):
     """Get a single vCon by UUID with error handling."""
     collection = get_vcon_collection()
-    return collection.find_one({'uuid': uuid})
+    vcon  = collection.find_one({'uuid': uuid})
+    convert_to_isoformat(vcon)
+    return vcon
 
 @mongo_error_handler
 def count_vcons(query=None):
