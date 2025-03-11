@@ -48,14 +48,6 @@ providers:
     watch: true
 
 
-
-middlewares:
-  auth-middleware:
-    basicAuth:
-      users:
-        # Generated using htpasswd -nb user password
-        - "admin:$apr1$ruca84Hq$mbjdMZBAG.KWn7vfN/SNK/"  # username: admin, password: password
-
 accessLog: {}
 
 log:
