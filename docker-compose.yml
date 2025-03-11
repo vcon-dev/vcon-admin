@@ -56,7 +56,8 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${DNS_REGISTRATION_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      #- "--certificatesresolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
+      # Comment out staging server to use production
+      # - "--certificatesresolvers.myresolver.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
 
     ports:
       # The HTTP port
@@ -85,8 +86,6 @@ services:
       dockerfile: ./Dockerfile
       context: .
     command: "streamlit run ./admin.py --server.port 8501 --server.baseUrlPath /admin"
-    ports:
-      - "8501:8501"
     volumes:
       - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -122,3 +121,5 @@ volumes:
 # docker-compose-1.yml
 networks:
   conserver:
+    external: true
+    
