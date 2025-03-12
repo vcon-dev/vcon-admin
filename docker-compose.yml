@@ -10,9 +10,6 @@ services:
       - "27017:27017"
     volumes:
       - .data/db:/data/db
-    profiles:
-      - prod
-      - standalone
     networks:
       - conserver
   
@@ -27,10 +24,7 @@ services:
       ME_CONFIG_BASICAUTH: false
       ME_CONFIG_SITE_BASEURL: "/mongo-express"
     ports:
-      - "8081:8081"
-    profiles:
-      - dev
-      - standalone  
+      - "8081"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mongo-express.entrypoints=websecure"
@@ -56,8 +50,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${DNS_REGISTRATION_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      # Comment out staging server to use production
-      # - "--certificatesresolvers.myresolver.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
+      #- "--certificatesresolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
 
     ports:
       # The HTTP port
@@ -86,16 +79,14 @@ services:
       dockerfile: ./Dockerfile
       context: .
     command: "streamlit run ./admin.py --server.port 8501 --server.baseUrlPath /admin"
+    ports:
+      - "8501"
     volumes:
       - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - mongo
     stop_grace_period: 60s
-    profiles:
-      - dev
-      - prod
-      - standalone
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.admin.rule=Host(`${DNS_HOST}`) && PathPrefix(`/admin`) "
@@ -122,4 +113,3 @@ volumes:
 networks:
   conserver:
     external: true
-    
