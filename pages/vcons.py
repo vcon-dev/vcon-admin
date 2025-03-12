@@ -1,161 +1,179 @@
 import streamlit as st
-import pandas as pd
 import lib.common as common
 from vcon import Vcon
+import json
+import pandas as pd
+from datetime import datetime
 
 common.init_session_state()
 common.sidebar()
 
-def parties_as_markdown(parties):
-    party_strings = []
-    if not parties:
-        return ""
-        
-    for party in parties:
-        # Handle Party objects from the vcon library
-        try:
-            # Access properties directly as attributes
-            role = ""
-            if hasattr(party, "meta") and party.meta and "role" in party.meta:
-                role = party.meta["role"].upper()
-                
-            name = getattr(party, "name", "")
-            tel = getattr(party, "tel", "")
-            email = getattr(party, "mailto", "")
-            
-            party_strings.append(f"{role} - {name} {tel} {email}".strip())
-        except Exception as e:
-            # Fallback to string representation
-            party_strings.append(str(party))
-                
-    return " | ".join(party_strings)
+# Title and page layout
+st.title("vCon Manager")
 
-def limit_to_words(text, word_limit=100):
-    """Limit text to a specified number of words and add ellipsis if truncated."""
-    if not text:
-        return ""
-    words = text.split()
-    if len(words) <= word_limit:
-        return text
-    return " ".join(words[:word_limit]) + "..."
-
-try:
-    # Get vCon count using the centralized MongoDB connection
-    vcon_count = common.count_vcons()
-except Exception as e:
-    st.error(f"Unable to connect to mongo database: {str(e)}")
-    st.stop()
-
-if vcon_count == 0:
-    st.error("No VCONs found in the database")
-    st.stop()
-
-st.title(f"VCON INFO: {vcon_count} vcons")
-
-# Pagination settings and controls
-if "items_per_page" not in st.session_state:
-    st.session_state.items_per_page = 25
-
-# Dropdown for selecting number of rows
-items_per_page_options = [10, 25, 50, 100]
-
-# Streamlit session state to keep track of the current page
-if "page" not in st.session_state:
-    st.session_state.page = 0
-
-# Pagination controls
-total_pages = (vcon_count + st.session_state.items_per_page - 1) // st.session_state.items_per_page
-skip = st.session_state.page * st.session_state.items_per_page
-
-# Fetch documents using the common MongoDB connection
-vcon_docs = common.get_vcons(
-    limit=st.session_state.items_per_page,
-    sort_by="created_at",
-    sort_order="descending"
-)
-
-# Convert MongoDB documents to Vcon objects
-vcons = [Vcon(vcon_doc) for vcon_doc in vcon_docs]
-
-# Create list of dictionaries for DataFrame
-vcon_data = []
-for vcon in vcons:
-    # First try to get summary, then fall back to transcript
-    content = ""
-    
-    # Try to get summary first
-    summary_analysis = vcon.find_analysis_by_type("summary")
-    if summary_analysis and "body" in summary_analysis:
-        if isinstance(summary_analysis["body"], str):
-            content = summary_analysis["body"]
-        elif isinstance(summary_analysis["body"], dict) and "summary" in summary_analysis["body"]:
-            content = summary_analysis["body"]["summary"]
-        else:
-            content = str(summary_analysis["body"])
-    
-    # If no summary, fall back to transcript
-    if not content:
-        transcript_analysis = vcon.find_analysis_by_type("transcript")
-        if transcript_analysis and "body" in transcript_analysis:
-            # Use deepgram_transcript_to_markdown if body is a dictionary with the expected structure
-            if isinstance(transcript_analysis["body"], dict):
-                try:
-                    content = common.deepgram_transcript_to_markdown(transcript_analysis["body"])
-                except Exception as e:
-                    # Fallback to string representation if the structure doesn't match
-                    content = str(transcript_analysis["body"])
-            elif isinstance(transcript_analysis["body"], str):
-                content = " ".join(transcript_analysis["body"].split())
-            else:
-                # Handle non-string body content
-                content = str(transcript_analysis["body"])
-    
-    # Limit content to 100 words
-    content = limit_to_words(content, 100)
-    
-    vcon_dict = {
-        "created_at": vcon.created_at,
-        "party_names": parties_as_markdown(vcon.parties),
-        "uuid": vcon.uuid,
-        "content": content
-    }
-    vcon_data.append(vcon_dict)
-
-# Create and clean DataFrame
-df = pd.DataFrame(vcon_data)
-
-# Process DataFrame
-inspect_path = st.secrets["inspect_path"] if "inspect_path" in st.secrets else "http://localhost:8501/inspect"
-
-if not df.empty:
-    df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime('%Y-%m-%d %H:%M')
-    df["link"] = df["uuid"].apply(lambda x: f'<a href="{inspect_path}?uuid={x}">Details</a>')
-
-    # Change the column order
-    df = df[["uuid", "created_at", "party_names", "content", "link"]]
-
-    # Change the column names
-    df.columns = [ "UUID",  "Created", "Parties", "Content","Link"]
-
-# Display DataFrame
-st.markdown(df.to_html(escape=False), unsafe_allow_html=True)
-
-# Create 4 columns for the pagination controls and dropdown
-col0, col1, col2, col3, col4, col5 = st.columns([4, 1, 1, 1, 1, 4])
+# Add filter options
+col1, col2 = st.columns([1, 2])
 
 with col1:
-    if st.button("Previous") and st.session_state.page > 0:
-        st.session_state.page -= 1
+    limit = st.number_input("Number of vCons to display", min_value=10, max_value=1000, value=100, step=10)
+    
 with col2:
-    st.write(f"Page {st.session_state.page + 1} of {total_pages}")
-with col3:
-    if st.button("Next") and st.session_state.page < total_pages - 1:
-        st.session_state.page += 1
-with col4:
-    st.selectbox(
-        "Rows:",
-        options=items_per_page_options,
-        index=items_per_page_options.index(st.session_state.items_per_page),
-        key="items_per_page",
-        label_visibility="collapsed"
+    sort_options = {
+        "Created (newest first)": {"field": "created_at", "order": "descending"},
+        "Created (oldest first)": {"field": "created_at", "order": "ascending"},
+        "Updated (newest first)": {"field": "updated_at", "order": "descending"},
+        "Updated (oldest first)": {"field": "updated_at", "order": "ascending"}
+    }
+    sort_selection = st.selectbox("Sort by", options=list(sort_options.keys()))
+
+# Get the selected sort option
+sort_config = sort_options[sort_selection]
+
+# Display total count
+total_vcons = common.count_vcons()
+st.write(f"Total vCons in database: {total_vcons}")
+
+# Add a status message about optimization
+st.info("💡 Using optimized data loading (dialog content is loaded only when needed)")
+
+# Initialize variables that will be used outside the status block
+vcons = []
+table_data = []
+df = None
+display_df = None
+
+# Check if the UUID is in session state (from clicking a row)
+if "selected_vcon" in st.session_state and st.session_state.selected_vcon:
+    # Redirect to inspect page
+    st.switch_page("pages/inspect_vcon.py")
+
+# Create a status container for feedback
+status_container = st.empty()
+
+# Start the data loading process with status feedback
+with status_container.status("Starting vCon retrieval process...") as status:
+    status.update(label="Querying MongoDB for vCons...", state="running")
+    
+    # Fetch vCons using the optimized common module function - note the include_full_dialog=False parameter
+    # This prevents loading large wav files in the dialog, significantly improving performance
+    vcons = common.get_vcons(
+        limit=limit, 
+        sort_by=sort_config["field"], 
+        sort_order=sort_config["order"],
+        include_full_dialog=False  # Only fetch metadata, not the large dialog body content
     )
+    
+    if not vcons:
+        status.update(label="No vCons found in database", state="complete")
+    else:
+        # Update status for data processing
+        status.update(label=f"Retrieved {len(vcons)} vCons from MongoDB. Processing data...", state="running")
+        
+        # Prepare data for the table
+        table_data = []
+        
+        # Create a progress bar for processing vCons
+        progress_bar = st.progress(0)
+        total_vcons_to_process = len(vcons)
+        
+        for idx, vcon in enumerate(vcons):
+            # Update progress
+            progress_value = int((idx + 1) / total_vcons_to_process * 100)
+            progress_bar.progress(progress_value, text=f"Processing vCon {idx + 1} of {total_vcons_to_process}")
+            
+            # Format dates nicely
+            created_at = vcon.get('created_at')
+            if created_at:
+                try:
+                    if isinstance(created_at, str):
+                        created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    created_at = created_at.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    created_at = str(created_at)
+                               
+            # Count dialog entries - we still have dialog metadata, just not the body content
+            dialog_count = len(vcon.get('dialog', []))
+            
+            # Get parties information
+            parties = vcon.get('parties', [])
+            parties_str = ", ".join([p.get('name', 'Unknown') for p in parties]) if parties else "No parties"
+            if len(parties_str) > 50:
+                parties_str = parties_str[:50] + "..."
+            
+            # Add estimated size information
+            dialog_types = {}
+            for dialog in vcon.get('dialog', []):
+                mime_type = dialog.get('mime_type', 'unknown')
+                dialog_types[mime_type] = dialog_types.get(mime_type, 0) + 1
+            
+            # Format dialog types as a string
+            dialog_types_str = ", ".join([f"{count} {mime}" for mime, count in dialog_types.items()])
+            
+            # Get the UUID for this vCon
+            uuid = vcon.get('uuid', 'N/A')
+            
+            # Add to table data
+            table_data.append({
+                "UUID": uuid,
+                "Created At": created_at or "N/A",
+                "Parties": parties_str,
+                "Dialog Entries": dialog_count,
+                "Dialog Types": dialog_types_str,
+                "Inspect": "View"  # Simple text that will be made clickable
+            })
+        
+        # Clear the progress bar after processing
+        progress_bar.empty()
+        
+        # Update status for table creation
+        status.update(label="Creating and formatting display table...", state="running")
+        
+        # Create DataFrame
+        df = pd.DataFrame(table_data)
+        
+        # Create a display version of the dataframe without the UUID column (but we'll keep it in the df for reference)
+        display_cols = [col for col in df.columns if col != "UUID"]
+        display_df = df[display_cols]
+        
+        # Update status to complete
+        status.update(label=f"Successfully loaded and processed {len(vcons)} vCons", state="complete")
+
+# Display warnings or tables based on the data we loaded
+if not vcons:
+    st.warning("No vCons found in the database.")
+else:
+    # Make the table interactive with a callback for clicking on a row
+    st.write("Click on 'View' in the Inspect column to view vCon details:")
+    
+    # Configure the dataframe with column settings
+    column_config = {
+        "Inspect": st.column_config.TextColumn(
+            "Inspect",
+            help="Click to view vCon details",
+            width="small"
+        )
+    }
+    
+    # Display the dataframe with on_click handler
+    selected_rows = st.dataframe(
+        display_df, 
+        use_container_width=True, 
+        height=500,
+        column_config=column_config,
+        hide_index=True
+    )
+    
+    # Handle clicking on a row in the dataframe
+    if selected_rows.rows:
+        # Get the index of the selected row
+        selected_index = selected_rows.rows[0]
+        # Get the UUID from the original dataframe using the selected index
+        selected_uuid = df.iloc[selected_index]["UUID"]
+        # Store the UUID in session state
+        st.session_state.selected_vcon = selected_uuid
+        # Redirect to the inspect page
+        st.rerun()
+    
+    # Display summary statistics
+    st.success(f"✅ Displaying {len(vcons)} vCons with a total of {sum(row['Dialog Entries'] for row in table_data)} dialog entries")
+
