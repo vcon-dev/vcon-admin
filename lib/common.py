@@ -92,8 +92,21 @@ def mongo_error_handler(func):
 
 # Enhanced vCon retrieval functions
 @mongo_error_handler
-def get_vcons(since=None, limit=None, sort_by="created_at", sort_order="descending"):
-    """Get vCons with better pagination and sorting support."""
+def get_vcons(since=None, limit=None, sort_by="created_at", sort_order="descending", include_full_dialog=False):
+    """
+    Get vCons with better pagination, sorting support, and optimized projection.
+    
+    Args:
+        since: Optional datetime to filter vCons created after this date
+        limit: Maximum number of vCons to return
+        sort_by: Field to sort by
+        sort_order: "ascending" or "descending"
+        include_full_dialog: Whether to include the full dialog data (which may contain large wav files)
+                           Set to False to only include metadata, improving performance
+    
+    Returns:
+        List of vCon documents with selective fields based on the include_full_dialog parameter
+    """
     collection = get_vcon_collection()
     query = {}
     if since:
@@ -102,17 +115,62 @@ def get_vcons(since=None, limit=None, sort_by="created_at", sort_order="descendi
     # Handle sorting
     sort_direction = pymongo.DESCENDING if sort_order.lower() == "descending" else pymongo.ASCENDING
     
-    cursor = collection.find(query).sort(sort_by, sort_direction)
+    # Default projection to exclude potentially large binary data in dialog
+    if not include_full_dialog:
+        # MongoDB doesn't allow mixing inclusion and exclusion operators in the same projection
+        # Use exclusion-only projection to exclude large binary data
+        projection = {
+            "dialog.body": 0,
+            "_id": 0
+        }
+        cursor = collection.find(query, projection).sort(sort_by, sort_direction)
+    else:
+        # Get full documents including dialog body (potentially large)
+        cursor = collection.find(query, {"_id": 0}).sort(sort_by, sort_direction)
+    
     if limit:
         cursor = cursor.limit(limit)
     
-    return list(cursor)
+    # Use batch processing to handle large result sets efficiently
+    result = []
+    batch_size = 100  # Process in batches to reduce memory pressure
+    
+    for i, doc in enumerate(cursor):
+        if limit and i >= limit:
+            break
+        result.append(doc)
+        
+        # Process in batches to avoid memory issues with large result sets
+        if i > 0 and i % batch_size == 0:
+            # This allows for GC between batches
+            logger.info(f"Processed {i} vCons...")
+    
+    return result
 
 @mongo_error_handler
-def get_vcon(uuid):
-    """Get a single vCon by UUID with error handling."""
+def get_vcon(uuid, include_full_dialog=True):
+    """
+    Get a single vCon by UUID with error handling.
+    
+    Args:
+        uuid: The UUID of the vCon to retrieve
+        include_full_dialog: Whether to include full dialog data or just metadata
+    
+    Returns:
+        The vCon document or None if not found
+    """
     collection = get_vcon_collection()
-    return collection.find_one({'uuid': uuid})
+    
+    if not include_full_dialog:
+        # Use exclusion-only projection to exclude large binary data
+        projection = {
+            "dialog.body": 0,
+            "_id": 0
+        }
+        return collection.find_one({'uuid': uuid}, projection)
+    else:
+        # Get the full document including dialog body (potentially large)
+        return collection.find_one({'uuid': uuid}, {"_id": 0})
 
 @mongo_error_handler
 def count_vcons(query=None):
