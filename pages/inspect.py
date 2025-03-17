@@ -17,14 +17,23 @@ def get_vcon_summary(vcon):
             if a.get('type') == 'summary':
                 return a.get('body')
     return None
+
+# Get the vCon ID from session state and clear it to prevent continuous redirection
+initial_vcon = st.session_state.get('selected_vcon', '')
+if 'selected_vcon' in st.session_state:
+    del st.session_state.selected_vcon
     
-selected_vcon = st.text_input("ENTER A VCON ID", value=st.session_state.selected_vcon)
+# Check the query params for a vcon id, if it exists, use it as the initial vcon id
+if 'vcon_uuid' in st.query_params:
+    initial_vcon = st.query_params['vcon_uuid']
+
+selected_vcon = st.text_input("ENTER A VCON ID", value=initial_vcon)
+
 if selected_vcon:
     st.session_state.selected_vcon = selected_vcon
 
-if st.session_state.selected_vcon:
     # Using the common module function instead of direct connection
-    vcon = common.get_vcon(st.session_state.selected_vcon)
+    vcon = common.get_vcon(selected_vcon)
 
     # ADD A BUTTON FOR DOWNLOADING THE VCON as JSON
         
@@ -32,7 +41,7 @@ if st.session_state.selected_vcon:
     download = st.download_button(
         label="DOWNLOAD VCON",
         data=serialized_data,
-        file_name=f"{st.session_state.selected_vcon}.json",
+        file_name=f"{selected_vcon}.json",
         mime="application/json"
     )
 
@@ -41,9 +50,9 @@ if st.session_state.selected_vcon:
         if 'vcon_uuids' not in st.session_state:
             st.session_state.vcon_uuids = []
         vcon_uuids = st.session_state.vcon_uuids
-        vcon_uuids.append(st.session_state.selected_vcon)
+        vcon_uuids.append(selected_vcon)
         st.session_state.vcon_uuids = vcon_uuids
-        st.success(f"ADDED {st.session_state.selected_vcon} TO WORKBENCH.")
+        st.success(f"ADDED {selected_vcon} TO WORKBENCH.")
 
     if vcon:
         try:
@@ -88,4 +97,4 @@ if st.session_state.selected_vcon:
         except KeyError:
             st.error("Invalid vCon, both created_at and uuid are required.")
     else:
-        st.error(f"No vCon found with uuid: {st.session_state.selected_vcon}")
+        st.error(f"No vCon found with uuid: {selected_vcon}")
