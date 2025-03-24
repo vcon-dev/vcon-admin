@@ -73,11 +73,10 @@ with upload_zip_tab:
 
 with jsonl_tab:
     "**UPLOAD BULK VCON**"
-
-    uploaded_file = st.file_uploader("UPLOAD JSONL", type="jsonl, vconl")
+    uploaded_file = st.file_uploader("UPLOAD JSONL", type="json")
 
     if uploaded_file is not None:
-        if st.button("UPLOAD AND INSERT"):
+        if st.button("UPLOAD AND INSERT JSONL"):
             collection = common.get_vcon_collection()
             for i, line in enumerate(uploaded_file):
                 try:
@@ -217,7 +216,7 @@ with export_tab:
     """
     output_format = st.radio("EXPORT FORMAT", ("JSONL", "JSON"))
     DEFAULT_PATH = ""
-    path = st.text_input("ENTER THE DIRECTORY PATH", value=DEFAULT_PATH)
+    path = st.text_input("ENTER THE FULL PATH", value=DEFAULT_PATH)
     exporting = st.button("EXPORT VCONS", key="export")
 
     if exporting: 
@@ -227,12 +226,15 @@ with export_tab:
             vcons = collection.find()
             if output_format == "JSONL":
                 # Open a file for writing in JSONL format
-                with open(f"{path}output.jsonl", "w") as file:
+                with open(path, "w") as file:
                     # Iterate through each JSON object in the array
+                    count = 0
                     for vcon in vcons:
-                        # Convert the JSON object to a string and write it to the file
+                        # Remove the Mongo ID, onvert the JSON object to a string and write it to the file
+                        del vcon["_id"]
                         json_line = json.dumps(vcon)
                         file.write(json_line + "\n")
+                        count += 1
             else:
                 for vcon in vcons:
                     uuid = vcon['uuid']
@@ -241,6 +243,8 @@ with export_tab:
                         f.write(json.dumps(vcon))
                         f.close()
         st.success("COMPLETE")
+        st.write("Number of vCons exported: " + str(count))
+        st.write("Number of vCons in the database: " + str(collection.count_documents({})))
         
 with export_redis_tab:
     
