@@ -40,7 +40,7 @@ def get_openai_client():
     return OpenAI(
         organization=st.secrets["openai"]["organization"],
         project=st.secrets["openai"]["project"],
-        api_key=st.secrets["openai"]["testing_key"],
+        api_key=st.secrets["openai"]["secret_key"],
     )
 
 client = get_openai_client()
