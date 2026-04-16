@@ -1,0 +1,223 @@
+{
+  "schema_version": "1.0.0",
+  "repo": "vcon-admin",
+  "repo_version": "0.1.0",
+  "archetype": "python-library",
+  "generated_at": "2026-04-16T15:15:45.437382+00:00",
+  "stats": {
+    "node_count": 30,
+    "edge_count": 0
+  },
+  "nodes": [
+    {
+      "id": "function:init_connection",
+      "type": "function",
+      "name": "init_connection",
+      "file": "admin.py",
+      "line": 18
+    },
+    {
+      "id": "function:init_session_state",
+      "type": "function",
+      "name": "init_session_state",
+      "file": "lib/common.py",
+      "line": 22
+    },
+    {
+      "id": "function:convert_to_isoformat",
+      "type": "function",
+      "name": "convert_to_isoformat",
+      "file": "lib/common.py",
+      "line": 42
+    },
+    {
+      "id": "function:get_mongo_client",
+      "type": "function",
+      "name": "get_mongo_client",
+      "file": "lib/common.py",
+      "line": 52
+    },
+    {
+      "id": "function:get_vcon_db",
+      "type": "function",
+      "name": "get_vcon_db",
+      "file": "lib/common.py",
+      "line": 74
+    },
+    {
+      "id": "function:get_vcon_collection",
+      "type": "function",
+      "name": "get_vcon_collection",
+      "file": "lib/common.py",
+      "line": 80
+    },
+    {
+      "id": "function:mongo_error_handler",
+      "type": "function",
+      "name": "mongo_error_handler",
+      "file": "lib/common.py",
+      "line": 86
+    },
+    {
+      "id": "function:get_vcons",
+      "type": "function",
+      "name": "get_vcons",
+      "file": "lib/common.py",
+      "line": 105
+    },
+    {
+      "id": "function:get_vcon",
+      "type": "function",
+      "name": "get_vcon",
+      "file": "lib/common.py",
+      "line": 161
+    },
+    {
+      "id": "function:count_vcons",
+      "type": "function",
+      "name": "count_vcons",
+      "file": "lib/common.py",
+      "line": 186
+    },
+    {
+      "id": "function:update_vcon",
+      "type": "function",
+      "name": "update_vcon",
+      "file": "lib/common.py",
+      "line": 192
+    },
+    {
+      "id": "function:insert_vcon",
+      "type": "function",
+      "name": "insert_vcon",
+      "file": "lib/common.py",
+      "line": 199
+    },
+    {
+      "id": "function:get_es_client",
+      "type": "function",
+      "name": "get_es_client",
+      "file": "lib/common.py",
+      "line": 206
+    },
+    {
+      "id": "function:get_conserver_config",
+      "type": "function",
+      "name": "get_conserver_config",
+      "file": "lib/common.py",
+      "line": 217
+    },
+    {
+      "id": "function:sidebar",
+      "type": "function",
+      "name": "sidebar",
+      "file": "lib/common.py",
+      "line": 235
+    },
+    {
+      "id": "function:search_vcons",
+      "type": "function",
+      "name": "search_vcons",
+      "file": "pages/elastic.py",
+      "line": 21
+    },
+    {
+      "id": "function:display_results",
+      "type": "function",
+      "name": "display_results",
+      "file": "pages/elastic.py",
+      "line": 39
+    },
+    {
+      "id": "function:load_and_insert_file",
+      "type": "function",
+      "name": "load_and_insert_file",
+      "file": "pages/import-export.py",
+      "line": 15
+    },
+    {
+      "id": "function:get_vcon_summary",
+      "type": "function",
+      "name": "get_vcon_summary",
+      "file": "pages/inspect.py",
+      "line": 13
+    },
+    {
+      "id": "function:get_openai_client",
+      "type": "function",
+      "name": "get_openai_client",
+      "file": "pages/milvus_files.py",
+      "line": 39
+    },
+    {
+      "id": "function:ensure_milvus_connection",
+      "type": "function",
+      "name": "ensure_milvus_connection",
+      "file": "pages/milvus_files.py",
+      "line": 62
+    },
+    {
+      "id": "function:get_embedding",
+      "type": "function",
+      "name": "get_embedding",
+      "file": "pages/milvus_files.py",
+      "line": 95
+    },
+    {
+      "id": "function:extract_text_from_vcon",
+      "type": "function",
+      "name": "extract_text_from_vcon",
+      "file": "pages/milvus_files.py",
+      "line": 107
+    },
+    {
+      "id": "function:extract_party_id",
+      "type": "function",
+      "name": "extract_party_id",
+      "file": "pages/milvus_files.py",
+      "line": 206
+    },
+    {
+      "id": "function:save_to_milvus",
+      "type": "function",
+      "name": "save_to_milvus",
+      "file": "pages/milvus_files.py",
+      "line": 263
+    },
+    {
+      "id": "function:get_collection_list",
+      "type": "function",
+      "name": "get_collection_list",
+      "file": "pages/milvus_files.py",
+      "line": 697
+    },
+    {
+      "id": "function:get_vcon_summary",
+      "type": "function",
+      "name": "get_vcon_summary",
+      "file": "pages/workbench.py",
+      "line": 19
+    },
+    {
+      "id": "function:get_vcon_transcript",
+      "type": "function",
+      "name": "get_vcon_transcript",
+      "file": "pages/workbench.py",
+      "line": 27
+    },
+    {
+      "id": "artifact:docker-image",
+      "type": "artifact",
+      "name": "Docker image",
+      "file": "Dockerfile"
+    },
+    {
+      "id": "document:readme-md",
+      "type": "document",
+      "name": "README.md",
+      "file": "README.md"
+    }
+  ],
+  "edges": [],
+  "subsystems": []
+}
